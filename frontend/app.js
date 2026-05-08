@@ -424,7 +424,7 @@ function showDetailsModal(session) {
     <dl>
       <dt>ID</dt>         <dd>${escapeHtml(String(session.id ?? "—"))}</dd>
       <dt>Name</dt>       <dd>${escapeHtml(session.name ?? "—")}</dd>
-      <dt>Server</dt>     <dd>${escapeHtml(session.server ?? "—")}</dd>
+      <dt>Server</dt>     <dd>${escapeHtml(session.ixnet_server ?? "—")}</dd>
       <dt>Chassis</dt>    <dd>${escapeHtml(session.chassis ?? "—")}</dd>
       <dt>Ports</dt>      <dd>${escapeHtml(portsDisplay)}</dd>
       <dt>CP Active</dt>  <dd>${session.cp_active ? "Yes" : "No"}</dd>
@@ -467,7 +467,7 @@ function showKillConfirm(session) {
   _killTarget = session;
 
   document.getElementById("modal-kill-session-name").textContent =
-    `${session.name ?? session.id} (server: ${session.server ?? "unknown"})`;
+    `${session.name ?? session.id} (server: ${session.ixnet_server ?? "unknown"})`;
 
   openModal("modal-kill");
 }
