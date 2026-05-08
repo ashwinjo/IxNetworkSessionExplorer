@@ -11,11 +11,11 @@ Backend service for unified IxNetwork session discovery and management across mu
 python3.11 -m venv venv
 source venv/bin/activate
 
-# Install production dependencies
-pip install -r requirements.txt
+# Install with production dependencies
+pip install -e .
 
-# Or, for development:
-pip install -r requirements-dev.txt
+# Or, for development (includes test/lint tools):
+pip install -e ".[dev]"
 ```
 
 ### Running the Server

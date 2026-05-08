@@ -49,7 +49,10 @@ Repository = "https://github.com/yourusername/IxNetworkSessionExplorer"
 Issues = "https://github.com/yourusername/IxNetworkSessionExplorer/issues"
 
 [tool.setuptools]
-packages = ["ixse"]
+# Automatically discover all packages and subpackages
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["ixse*"]
 
 [tool.black]
 line-length = 100
