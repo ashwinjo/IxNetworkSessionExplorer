@@ -131,6 +131,12 @@ async function fetchSessions() {
  * then re-fetch sessions.
  */
 async function triggerRefresh() {
+  const btn = document.getElementById("btn-refresh");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = "Refreshing…";
+  }
+
   try {
     const resp = await fetch(`${API_BASE_URL}/poll/trigger`, {
       method: "POST",
@@ -138,13 +144,20 @@ async function triggerRefresh() {
     });
 
     if (!resp.ok) {
-      // Non-fatal: server may not implement this endpoint yet
+      const msg = `Poll trigger failed (HTTP ${resp.status}) — fetching cached state`;
       console.warn(`POST /poll/trigger returned ${resp.status} — falling back to direct fetch`);
+      showToast(msg, "error");
     }
   } catch (err) {
+    const msg = `Poll trigger unreachable — fetching cached state`;
     console.warn(`POST /poll/trigger failed: ${err.message} — falling back to direct fetch`);
+    showToast(msg, "error");
   } finally {
     await fetchSessions();
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = "↺ Refresh Now";
+    }
   }
 }
 
@@ -393,14 +406,18 @@ function toggleAutoRefresh() {
   const btn = document.getElementById("btn-auto-refresh");
 
   if (_autoTimer) {
+    // Turning OFF: clear interval first, then null the handle
     clearInterval(_autoTimer);
     _autoTimer = null;
-    btn.textContent = "OFF";
+    btn.textContent = "Auto-refresh: OFF";
     btn.classList.remove("active");
+    btn.setAttribute("aria-pressed", "false");
   } else {
+    // Turning ON
     _autoTimer = setInterval(fetchSessions, AUTO_REFRESH_INTERVAL_MS);
-    btn.textContent = "ON";
+    btn.textContent = "Auto-refresh: ON";
     btn.classList.add("active");
+    btn.setAttribute("aria-pressed", "true");
   }
 }
 
@@ -414,23 +431,49 @@ function toggleAutoRefresh() {
  * @param {Object} session — session object from _sessionCache
  */
 function showDetailsModal(session) {
-
   const body = document.getElementById("modal-details-body");
+
   const portsDisplay = Array.isArray(session.ports)
     ? session.ports.join(", ")
     : (session.ports ?? "—");
 
+  const chassisDisplay = Array.isArray(session.chassis)
+    ? session.chassis.join(", ")
+    : (session.chassis ?? "—");
+
+  const tagsDisplay = (session.tags ?? []).length > 0
+    ? session.tags.join(", ")
+    : "None";
+
+  // Returns an HTML snippet — safe to embed directly (no user data, only fixed glyphs).
+  const boolCell = val => val
+    ? `<span class="detail-ok">&#10003;</span>`
+    : `<span class="detail-err">&#10007;</span>`;
+
+  let lastPolledDisplay = "—";
+  if (session.last_polled) {
+    try {
+      const d = new Date(session.last_polled);
+      lastPolledDisplay = isNaN(d.getTime())
+        ? escapeHtml(String(session.last_polled))
+        : d.toLocaleString();
+    } catch {
+      lastPolledDisplay = escapeHtml(String(session.last_polled));
+    }
+  }
+
   body.innerHTML = `
     <dl>
-      <dt>ID</dt>         <dd>${escapeHtml(String(session.id ?? "—"))}</dd>
-      <dt>Name</dt>       <dd>${escapeHtml(session.name ?? "—")}</dd>
-      <dt>Server</dt>     <dd>${escapeHtml(session.ixnet_server ?? "—")}</dd>
-      <dt>Chassis</dt>    <dd>${escapeHtml(session.chassis ?? "—")}</dd>
-      <dt>Ports</dt>      <dd>${escapeHtml(portsDisplay)}</dd>
-      <dt>CP Active</dt>  <dd>${session.cp_active ? "Yes" : "No"}</dd>
-      <dt>DP Active</dt>  <dd>${session.dp_active ? "Yes" : "No"}</dd>
-      <dt>Utilized</dt>   <dd>${session.utilized ? "Yes" : "No"}</dd>
-      <dt>Tags</dt>       <dd>${(session.tags ?? []).join(", ") || "—"}</dd>
+      <dt>Session ID</dt>   <dd>${escapeHtml(String(session.id ?? "—"))}</dd>
+      <dt>Name</dt>         <dd>${escapeHtml(session.name ?? "—")}</dd>
+      <dt>Server</dt>       <dd>${escapeHtml(session.ixnet_server ?? "—")}</dd>
+      <dt>Chassis</dt>      <dd>${escapeHtml(chassisDisplay)}</dd>
+      <dt>Ports</dt>        <dd>${escapeHtml(portsDisplay)}</dd>
+      <dt>CP Active</dt>    <dd>${boolCell(session.cp_active)}</dd>
+      <dt>DP Active</dt>    <dd>${boolCell(session.dp_active)}</dd>
+      <dt>Utilized</dt>     <dd>${boolCell(session.utilized)}</dd>
+      <dt>Tags</dt>         <dd>${escapeHtml(tagsDisplay)}</dd>
+      <dt>Last Polled</dt>  <dd>${lastPolledDisplay}</dd>
     </dl>
   `;
 
@@ -454,6 +497,11 @@ function showTagModal(session) {
 
   document.getElementById("tag-input-field").value = "";
 
+  // Reset error state from previous open
+  const errEl = document.getElementById("modal-tag-error");
+  errEl.textContent = "";
+  errEl.style.display = "none";
+
   openModal("modal-tag");
   document.getElementById("tag-input-field").focus();
 }
@@ -466,40 +514,141 @@ function showTagModal(session) {
 function showKillConfirm(session) {
   _killTarget = session;
 
-  document.getElementById("modal-kill-session-name").textContent =
-    `${session.name ?? session.id} (server: ${session.ixnet_server ?? "unknown"})`;
+  const name   = session.name ?? session.id;
+  const server = session.ixnet_server ?? "unknown";
+
+  const descEl = document.getElementById("modal-kill-description");
+  // Use textContent to avoid XSS; the element is a plain <p>.
+  descEl.textContent = `Kill session '${name}' on ${server}?`;
+
+  // Reset button and error state from previous open
+  const killBtn = document.getElementById("btn-kill-confirm");
+  killBtn.disabled = false;
+  killBtn.textContent = "Kill Session";
+
+  const errEl = document.getElementById("modal-kill-error");
+  errEl.textContent = "";
+  errEl.style.display = "none";
 
   openModal("modal-kill");
 }
 
 /**
- * submitTag — PATCH /sessions/{server}/{id}/tags with new tag.
- * Scaffold: full implementation in later task.
+ * submitTag — PATCH /sessions/{server}/{id}/tags with add or remove action.
+ *
+ * @param {"add"|"remove"} action
  */
-async function submitTag() {
+async function submitTag(action) {
   if (!_tagTarget) return;
 
   const tag = document.getElementById("tag-input-field").value.trim();
-  if (!tag) return;
 
-  // TODO: implement PATCH /sessions/{server}/{id}/tags
-  console.log("submitTag — target:", _tagTarget, "tag:", tag);
-  showToast(`Tag "${tag}" added (not yet persisted — backend task pending)`, "ok");
-  closeModal("modal-tag");
+  const errEl = document.getElementById("modal-tag-error");
+  errEl.textContent = "";
+  errEl.style.display = "none";
+
+  if (!tag) {
+    errEl.textContent = "Tag name cannot be empty.";
+    errEl.style.display = "block";
+    document.getElementById("tag-input-field").focus();
+    return;
+  }
+
+  const addBtn    = document.getElementById("btn-tag-add");
+  const removeBtn = document.getElementById("btn-tag-remove");
+  const isAdd     = action === "add";
+
+  // Loading state
+  addBtn.disabled    = true;
+  removeBtn.disabled = true;
+  addBtn.textContent    = isAdd ? "Adding…" : "Add Tag";
+  removeBtn.textContent = isAdd ? "Remove Tag" : "Removing…";
+
+  const { ixnet_server, id } = _tagTarget;
+  const url = `${API_BASE_URL}/sessions/${encodeURIComponent(ixnet_server)}/${encodeURIComponent(id)}/tags`;
+
+  try {
+    const resp = await fetch(url, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept":        "application/json",
+      },
+      body: JSON.stringify({ action, tag }),
+    });
+
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try {
+        const body = await resp.json();
+        detail = body.error ?? body.detail ?? detail;
+      } catch { /* ignore parse error — use status text */ }
+      throw new Error(detail);
+    }
+
+    const verb = isAdd ? "added to" : "removed from";
+    showToast(`Tag "${tag}" ${verb} session "${_tagTarget.name ?? _tagTarget.id}"`, "ok");
+    closeModal("modal-tag");
+    _tagTarget = null;
+    await fetchSessions();
+
+  } catch (err) {
+    errEl.textContent = `Error: ${err.message}`;
+    errEl.style.display = "block";
+  } finally {
+    addBtn.disabled    = false;
+    removeBtn.disabled = false;
+    addBtn.textContent    = "Add Tag";
+    removeBtn.textContent = "Remove Tag";
+  }
 }
 
 /**
  * confirmKill — DELETE /sessions/{server}/{id}?confirm=true
- * Scaffold: full implementation in later task.
  */
 async function confirmKill() {
   if (!_killTarget) return;
 
-  // TODO: implement DELETE /sessions/{server}/{id}?confirm=true
-  console.log("confirmKill — target:", _killTarget);
-  showToast(`Kill request sent for "${_killTarget.name}" (not yet implemented — backend task pending)`, "ok");
-  closeModal("modal-kill");
-  _killTarget = null;
+  const killBtn = document.getElementById("btn-kill-confirm");
+  const errEl   = document.getElementById("modal-kill-error");
+
+  errEl.textContent = "";
+  errEl.style.display = "none";
+
+  // Loading state
+  killBtn.disabled    = true;
+  killBtn.textContent = "Killing…";
+
+  const { ixnet_server, id, name } = _killTarget;
+  const url = `${API_BASE_URL}/sessions/${encodeURIComponent(ixnet_server)}/${encodeURIComponent(id)}?confirm=true`;
+
+  try {
+    const resp = await fetch(url, {
+      method: "DELETE",
+      headers: { "Accept": "application/json" },
+    });
+
+    if (!resp.ok) {
+      let detail = `HTTP ${resp.status}`;
+      try {
+        const body = await resp.json();
+        detail = body.error ?? body.detail ?? detail;
+      } catch { /* ignore parse error */ }
+      throw new Error(detail);
+    }
+
+    showToast(`Session "${name ?? id}" killed successfully.`, "ok");
+    closeModal("modal-kill");
+    _killTarget = null;
+    await fetchSessions();
+
+  } catch (err) {
+    errEl.textContent = `Error: ${err.message}`;
+    errEl.style.display = "block";
+    // Restore button so user can retry or cancel
+    killBtn.disabled    = false;
+    killBtn.textContent = "Kill Session";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -546,9 +695,10 @@ document.querySelectorAll(".modal-close").forEach(btn => {
 });
 
 // ----- Tag submit -------------------------------------------------------
-document.getElementById("btn-tag-submit").addEventListener("click", submitTag);
+document.getElementById("btn-tag-add").addEventListener("click", () => submitTag("add"));
+document.getElementById("btn-tag-remove").addEventListener("click", () => submitTag("remove"));
 document.getElementById("tag-input-field").addEventListener("keydown", e => {
-  if (e.key === "Enter") submitTag();
+  if (e.key === "Enter") submitTag("add");
 });
 
 // ----- Kill confirm -----------------------------------------------------
@@ -561,11 +711,22 @@ document.getElementById("btn-kill-confirm").addEventListener("click", confirmKil
 function updatePollTimestamp(isoString) {
   const el = document.getElementById("poll-timestamp");
   if (!el) return;
+
+  if (!isoString) {
+    el.textContent = "Never";
+    return;
+  }
+
   try {
     const d = new Date(isoString);
+    // new Date() on an invalid string produces NaN for getTime()
+    if (isNaN(d.getTime())) {
+      el.textContent = "Never";
+      return;
+    }
     el.textContent = d.toLocaleString();
   } catch {
-    el.textContent = isoString;
+    el.textContent = "Never";
   }
 }
 

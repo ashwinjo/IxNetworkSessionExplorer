@@ -38,9 +38,10 @@
 
     <!-- Auto-refresh toggle -->
     <div class="control-group">
-      <span class="label">Auto-refresh:</span>
-      <button id="btn-auto-refresh" class="btn btn-toggle" title="Toggle 30-second auto-refresh">
-        OFF
+      <button id="btn-auto-refresh" class="btn btn-toggle"
+              title="Toggle 30-second auto-refresh"
+              aria-pressed="false">
+        Auto-refresh: OFF
       </button>
     </div>
 
@@ -93,14 +94,16 @@
       <div class="modal-body">
         <p id="modal-tag-session-name" style="margin-bottom:6px; font-weight:600;"></p>
         <label for="tag-input-field" style="font-size:0.82rem; color:var(--color-text-muted);">
-          Enter tag to add:
+          Tag name:
         </label>
         <input type="text" id="tag-input-field" placeholder="e.g. bgp, lab-a, owner:ashwin" />
         <div id="modal-tag-existing" class="tag-list" style="margin-top:10px;"></div>
+        <div id="modal-tag-error" class="modal-error" style="display:none;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-neutral modal-close" data-modal="modal-tag">Cancel</button>
-        <button id="btn-tag-submit" class="btn btn-primary">Add Tag</button>
+        <button id="btn-tag-remove" class="btn btn-neutral">Remove Tag</button>
+        <button id="btn-tag-add" class="btn btn-primary">Add Tag</button>
       </div>
     </div>
   </div>
@@ -116,7 +119,8 @@
           This will permanently destroy the session and release all reserved ports.
           This action cannot be undone.
         </div>
-        <p>Session: <strong id="modal-kill-session-name"></strong></p>
+        <p id="modal-kill-description"></p>
+        <div id="modal-kill-error" class="modal-error" style="display:none;"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-neutral modal-close" data-modal="modal-kill">Cancel</button>
