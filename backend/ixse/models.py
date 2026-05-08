@@ -89,3 +89,16 @@ class PollStatus(BaseModel):
         default=None, description="When the next poll cycle is expected to start (UTC)"
     )
     is_polling: bool = Field(default=False, description="True while a poll cycle is in progress")
+
+
+class ChassisHealth(BaseModel):
+    """Reachability and utilisation summary for a single IxOS chassis."""
+
+    name: str = Field(..., description="Chassis label from config")
+    host: str = Field(..., description="Chassis IP or hostname")
+    reachable: bool = Field(..., description="True if the chassis responded to the last health check")
+    latency_ms: float | None = Field(default=None, description="Round-trip latency in milliseconds")
+    ports_in_use: int = Field(default=0, description="Number of ports assigned to active sessions")
+    last_checked: AwareDatetime | None = Field(
+        default=None, description="UTC timestamp of the last health check"
+    )
