@@ -85,6 +85,7 @@ document.getElementById("servers-container").addEventListener("click", e => {
  */
 async function fetchSessions() {
   setRefreshButtonState(true);
+  showLoading();
 
   try {
     const resp = await fetch(`${API_BASE_URL}/sessions`, {
@@ -97,13 +98,26 @@ async function fetchSessions() {
 
     const body = await resp.json();
 
-    if (body.status !== "ok") {
-      throw new Error(`API error: ${body.error ?? "unknown"}`);
+    // Support both envelope format { status, data, timestamp } and flat { servers, timestamp }.
+    let servers;
+    let timestamp;
+
+    if (body.status !== undefined) {
+      // Envelope format (production API)
+      if (body.status !== "ok") {
+        throw new Error(`API error: ${body.error ?? "unknown"}`);
+      }
+      servers   = (body.data ?? {}).servers ?? [];
+      timestamp = body.timestamp ?? body.data?.timestamp ?? new Date().toISOString();
+    } else {
+      // Flat format (task spec / dev mock)
+      servers   = body.servers ?? [];
+      timestamp = body.timestamp ?? new Date().toISOString();
     }
 
-    _sessions = body.data;
-    updatePollTimestamp(body.timestamp ?? new Date().toISOString());
-    renderServers(_sessions);
+    _sessions = { servers };
+    updatePollTimestamp(timestamp);
+    renderServers(servers);
 
   } catch (err) {
     showError(`Failed to fetch sessions: ${err.message}`);
@@ -139,34 +153,30 @@ async function triggerRefresh() {
 // ---------------------------------------------------------------------------
 
 /**
- * renderServers — build server accordion blocks from API data.
+ * renderServers — build server accordion blocks from the servers array.
  *
- * @param {Object} data  — _sessions object: { servers: [...] }
+ * @param {Array} servers  — array of server objects from GET /sessions
  */
-function renderServers(data) {
+function renderServers(servers) {
   const container = document.getElementById("servers-container");
 
   // Clear stale cache before each full render so removed sessions don't linger.
   _sessionCache.clear();
 
-  if (!data || !data.servers || data.servers.length === 0) {
-    container.innerHTML = `<div class="state-empty">No servers found. Check your configuration.</div>`;
-    return;
-  }
-
-  const query = document.getElementById("search-input").value.trim().toLowerCase();
-  const filtered = filterServers(data, query);
-
-  if (filtered.length === 0 && query) {
-    container.innerHTML = `<div class="state-empty">No sessions match "<strong>${escapeHtml(query)}</strong>".</div>`;
+  if (!servers || servers.length === 0) {
+    container.innerHTML = `<div class="state-empty">No IxNetwork servers configured.</div>`;
     return;
   }
 
   container.innerHTML = "";
-  filtered.forEach(server => {
+  servers.forEach(server => {
     const block = buildServerBlock(server);
     container.appendChild(block);
   });
+
+  // Re-apply active search filter after re-render (preserves filter state).
+  const query = document.getElementById("search-input").value.trim();
+  if (query) filterServers(query);
 }
 
 /**
@@ -180,7 +190,8 @@ function buildServerBlock(server) {
   block.className = "server-block";
   block.dataset.serverName = server.name;
 
-  const sessionCount = (server.sessions ?? []).length;
+  // Prefer server.session_count from API; fall back to sessions array length.
+  const sessionCount = server.session_count ?? (server.sessions ?? []).length;
 
   block.innerHTML = `
     <div class="server-header" role="button" tabindex="0"
@@ -285,7 +296,7 @@ function renderSessionRow(session) {
         <span class="session-name">${escapeHtml(session.name)}</span>
         ${tagsHtml}
       </td>
-      <td class="col-chassis">${escapeHtml(session.chassis ?? "—")}</td>
+      <td class="col-chassis">${escapeHtml(Array.isArray(session.chassis) ? session.chassis.join(", ") : (session.chassis ?? "—"))}</td>
       <td class="col-ports ports-cell">${escapeHtml(portsDisplay)}</td>
       <td class="col-cp">${cpIcon}</td>
       <td class="col-dp">${dpIcon}</td>
@@ -319,41 +330,31 @@ function renderSessionRow(session) {
 // ---------------------------------------------------------------------------
 
 /**
- * filterServers — filter server/session list by a search query.
+ * filterServers — show/hide rendered server blocks based on a search query.
  *
- * Matches against: session name, chassis, server name, server host, tags.
+ * Operates directly on the DOM via display:none so that no re-render is
+ * required on each keystroke.  Matches against server name and server host.
+ * If query is empty all blocks are shown.
  *
- * @param {Object} data   — { servers: [...] }
- * @param {string} query  — lower-cased search string
- * @returns {Array}       — filtered array of server objects (sessions filtered within)
+ * @param {string} query — raw (un-lowercased) search string from the input
  */
-function filterServers(data, query) {
-  if (!query) return data.servers;
+function filterServers(query) {
+  const normalized = query.trim().toLowerCase();
 
-  return data.servers
-    .map(server => {
-      const serverMatch =
-        server.name.toLowerCase().includes(query) ||
-        (server.host ?? "").toLowerCase().includes(query);
+  document.querySelectorAll(".server-block").forEach(block => {
+    if (!normalized) {
+      block.style.display = "";
+      return;
+    }
 
-      const filteredSessions = (server.sessions ?? []).filter(s => {
-        return (
-          serverMatch ||
-          (s.name ?? "").toLowerCase().includes(query) ||
-          (s.chassis ?? "").toLowerCase().includes(query) ||
-          (s.tags ?? []).some(t => t.toLowerCase().includes(query)) ||
-          (Array.isArray(s.ports) ? s.ports.join(" ") : (s.ports ?? "")).toLowerCase().includes(query)
-        );
-      });
+    const name = (block.dataset.serverName ?? "").toLowerCase();
+    // Also match against the host text inside the header (rendered as text content).
+    const hostEl = block.querySelector(".server-host");
+    const host   = hostEl ? hostEl.textContent.replace(/[()]/g, "").trim().toLowerCase() : "";
 
-      if (filteredSessions.length === 0 && !serverMatch) return null;
-
-      return {
-        ...server,
-        sessions: serverMatch ? (server.sessions ?? []) : filteredSessions,
-      };
-    })
-    .filter(Boolean);
+    const matches = name.includes(normalized) || host.includes(normalized);
+    block.style.display = matches ? "" : "none";
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -581,6 +582,11 @@ function statusIcon(active) {
     : `<span class="status-err" aria-label="Inactive">&#10007;</span>`;
 }
 
+function showLoading() {
+  const container = document.getElementById("servers-container");
+  container.innerHTML = `<div class="state-loading"><span class="spinner"></span> Loading sessions…</div>`;
+}
+
 function showError(message) {
   const container = document.getElementById("servers-container");
   container.innerHTML = `<div class="state-error">${escapeHtml(message)}</div>`;
@@ -621,7 +627,7 @@ document.getElementById("btn-collapse-all").addEventListener("click", collapseAl
 document.getElementById("btn-auto-refresh").addEventListener("click", toggleAutoRefresh);
 
 document.getElementById("search-input").addEventListener("input", e => {
-  if (_sessions) renderServers(_sessions);
+  filterServers(e.target.value);
 });
 
 // ---------------------------------------------------------------------------
