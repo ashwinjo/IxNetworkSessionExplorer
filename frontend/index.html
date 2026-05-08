@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IxNetwork Session Explorer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+       HEADER
+       ================================================================ -->
+  <header>
+    <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+      <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+    </svg>
+    <h1>IxNetwork Session Explorer</h1>
+  </header>
+
+  <!-- ================================================================
+       CONTROL BAR
+       ================================================================ -->
+  <div id="control-bar">
+    <!-- Last polled timestamp -->
+    <span id="last-polled">
+      Last polled: <span id="poll-timestamp">—</span>
+    </span>
+
+    <!-- Primary actions -->
+    <div class="control-group">
+      <button id="btn-refresh" class="btn btn-primary" title="Trigger a manual poll and refresh">
+        &#8635; Refresh Now
+      </button>
+      <button id="btn-expand-all" class="btn btn-neutral">Expand All</button>
+      <button id="btn-collapse-all" class="btn btn-neutral">Collapse All</button>
+    </div>
+
+    <!-- Auto-refresh toggle -->
+    <div class="control-group">
+      <span class="label">Auto-refresh:</span>
+      <button id="btn-auto-refresh" class="btn btn-toggle" title="Toggle 30-second auto-refresh">
+        OFF
+      </button>
+    </div>
+
+    <!-- Search -->
+    <div id="search-wrapper">
+      <label for="search-input" class="label">Search:</label>
+      <input
+        type="search"
+        id="search-input"
+        placeholder="session name, chassis, tag…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MAIN CONTENT — populated by app.js
+       ================================================================ -->
+  <main id="main-content">
+    <div id="servers-container">
+      <!-- Server blocks are injected here by renderServers() -->
+      <div class="state-loading">
+        <span class="spinner"></span> Loading sessions…
+      </div>
+    </div>
+  </main>
+
+  <!-- ================================================================
+       MODAL: Session Details
+       ================================================================ -->
+  <div id="modal-details" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-details-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-details-title">Session Details</div>
+      <div class="modal-body" id="modal-details-body">
+        <!-- Populated by showDetailsModal() -->
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-details">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Tag Session
+       ================================================================ -->
+  <div id="modal-tag" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-tag-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-tag-title">Tag Session</div>
+      <div class="modal-body">
+        <p id="modal-tag-session-name" style="margin-bottom:6px; font-weight:600;"></p>
+        <label for="tag-input-field" style="font-size:0.82rem; color:var(--color-text-muted);">
+          Enter tag to add:
+        </label>
+        <input type="text" id="tag-input-field" placeholder="e.g. bgp, lab-a, owner:ashwin" />
+        <div id="modal-tag-existing" class="tag-list" style="margin-top:10px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-tag">Cancel</button>
+        <button id="btn-tag-submit" class="btn btn-primary">Add Tag</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Kill Confirmation
+       ================================================================ -->
+  <div id="modal-kill" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-kill-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-kill-title">Confirm Session Termination</div>
+      <div class="modal-body">
+        <div class="kill-warning">
+          This will permanently destroy the session and release all reserved ports.
+          This action cannot be undone.
+        </div>
+        <p>Session: <strong id="modal-kill-session-name"></strong></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-kill">Cancel</button>
+        <button id="btn-kill-confirm" class="btn btn-danger">Kill Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TOAST CONTAINER — notification messages
+       ================================================================ -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <!-- ================================================================
+       SCRIPTS — config must load before app.js
+       ================================================================ -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
