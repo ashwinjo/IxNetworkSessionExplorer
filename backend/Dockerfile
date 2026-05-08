@@ -6,8 +6,12 @@ WORKDIR /build
 # Install build tools + copy dependency manifests
 COPY pyproject.toml requirements.txt ./
 
-# Install runtime deps into an isolated prefix so we can copy them cleanly
+# Install runtime deps into an isolated prefix so they copy cleanly
 RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# Copy source and build the wheel
+COPY ixse/ ./ixse/
+RUN pip install --no-cache-dir --prefix=/install --no-deps .
 
 
 # ---- runtime stage ----
@@ -22,15 +26,11 @@ RUN useradd --create-home --shell /bin/bash ixse
 
 WORKDIR /app
 
-# Copy installed packages from builder
+# Copy installed packages (deps + the ixse package itself) from builder
 COPY --from=builder /install /usr/local
 
-# Copy application source
-COPY ixse/ ./ixse/
-COPY pyproject.toml ./
-
-# Install the package itself (no deps — already installed above)
-RUN pip install --no-cache-dir --no-deps -e .
+# Writable data directory for SQLite
+RUN mkdir -p /app/data && chown ixse:ixse /app/data
 
 USER ixse
 

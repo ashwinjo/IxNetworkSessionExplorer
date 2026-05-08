@@ -33,12 +33,14 @@ from ixse.api.metrics import (
 )
 from ixse.api.routers import chassis as chassis_router
 from ixse.api.routers import health as health_router
+from ixse.api.routers import servers as servers_router
 from ixse.api.routers import sessions as sessions_router
 from ixse.api.state import FleetState
-from ixse.client import RestPyClient
+from ixse.client import RestPyClient, fetch_lldp_map
 from ixse.config import AppConfig, ConfigError, IxNetServerConfig, load_config
-from ixse.models import PollStatus, Session, SessionPort
-from ixse.plane import detect_cp
+from ixse.ixn_web import check_ixnetwork_web
+from ixse.models import LldpPeerInfo, PollStatus, ServerEntry, Session, SessionPort
+from ixse.plane import detect_cp_per_vport
 
 logger = logging.getLogger(__name__)
 
@@ -48,24 +50,96 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _parse_vports(vports: Any) -> list[SessionPort]:
+def _parse_location(raw: str) -> tuple[str, int, int] | None:
+    """Parse a vport location string into (chassis, card, port).
+
+    Handles all three formats observed in the wild:
+      - Location   field: "10.36.236.121;6;3"   (semicolon-separated — preferred)
+      - AssignedTo field: "10.36.236.121:6:3"   (colon-separated)
+      - Legacy REST path: "//10.36.236.121/6/3"  (slash-separated)
+
+    Returns None when the string is empty or cannot be parsed.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+
+    # Try semicolon first (Location field), then colon (AssignedTo), then slash
+    for sep in (";", ":", "/"):
+        parts = [p for p in raw.split(sep) if p]
+        if len(parts) >= 3:
+            try:
+                return parts[0], int(parts[1]), int(parts[2])
+            except (ValueError, IndexError):
+                continue
+    return None
+
+
+def _parse_vports(
+    vports: Any,
+    topologies: Any = None,
+    lldp_map: dict[tuple[str, int, int], LldpPeerInfo] | None = None,
+) -> list[SessionPort]:
     """Map RestPy Vport objects to SessionPort models.
 
-    The AssignedTo field is typically "//chassis-ip/card/port" or empty when
-    unassigned.  Unassigned / unparseable ports are silently dropped.
+    Uses Vport.Location (semicolons) as the primary location source and falls
+    back to Vport.AssignedTo (colons or slashes) when Location is absent.
+    Also captures Name, ConnectionState, Type, ActualSpeed, per-port CP status,
+    and LLDP neighbor info when an lldp_map is provided.
+
+    Args:
+        vports:     RestPy Vport collection from session.Ixnetwork.Vport.find()
+        topologies: Optional RestPy Topology collection for per-port CP detection.
+                    When None, cp_active defaults to False for all ports.
+        lldp_map:   Optional dict from fetch_lldp_map().  Maps
+                    (chassis_ip, card, port) → LldpPeerInfo.
+                    When None, lldp_peer is left as None on each port.
     """
     ports: list[SessionPort] = []
     for vp in vports:
-        assigned = str(getattr(vp, "AssignedTo", "") or "").strip("/")
-        parts = [p for p in assigned.split("/") if p]
-        if len(parts) < 3:
+        vport_name       = str(getattr(vp, "Name",            "") or "")
+        connection_state = str(getattr(vp, "ConnectionState", "") or "")
+        vport_type       = str(getattr(vp, "Type",            "") or "")
+        actual_speed_raw = getattr(vp, "ActualSpeed", 0)
+        try:
+            actual_speed = int(actual_speed_raw)
+        except (TypeError, ValueError):
+            actual_speed = 0
+
+        # Prefer Location (semicolon), fall back to AssignedTo (colon/slash)
+        location_str = str(getattr(vp, "Location",   "") or "")
+        assigned_str = str(getattr(vp, "AssignedTo", "") or "")
+        parsed = _parse_location(location_str) or _parse_location(assigned_str)
+
+        if parsed is None:
             continue
+
+        chassis_name, card, port = parsed
+
+        # Per-port CP detection via topology → device group status
+        vport_href = str(getattr(vp, "href", "") or "")
+        cp_active = (
+            detect_cp_per_vport(vport_href, topologies)
+            if topologies is not None and vport_href
+            else False
+        )
+
+        # LLDP neighbor info — look up by (chassis_ip, card, port)
+        lldp_peer = (lldp_map or {}).get((chassis_name, card, port))
+
         try:
             ports.append(
                 SessionPort(
-                    chassis_name=parts[0],
-                    card=int(parts[1]),
-                    port=int(parts[2]),
+                    chassis_name=chassis_name,
+                    card=card,
+                    port=port,
+                    vport_name=vport_name,
+                    connection_state=connection_state,
+                    vport_type=vport_type,
+                    actual_speed=actual_speed,
+                    cp_active=cp_active,
+                    dp_active=False,  # DP requires IxOS chassis stats (Phase 2)
+                    lldp_peer=lldp_peer,
                 )
             )
         except (ValueError, IndexError):
@@ -78,7 +152,7 @@ def _parse_vports(vports: Any) -> list[SessionPort]:
 # ---------------------------------------------------------------------------
 
 
-def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Session]:
+def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) -> list[Session]:
     """Poll a single IxNetwork server and upsert all sessions into *state*.
 
     Runs synchronously — the async caller wraps this in ``run_in_executor``.
@@ -98,28 +172,41 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Sessio
             sess_id = str(raw_sess.Id)
             sess_name = str(raw_sess.Name)
 
+            sess_username = str(getattr(raw_sess, "UserName", "") or "")
+
+            # Fetch topologies once; used for per-port CP detection
             try:
-                cp_active = detect_cp(raw_sess.Ixnetwork)
+                topologies = raw_sess.Ixnetwork.Topology.find()
             except Exception:  # noqa: BLE001
-                cp_active = False
+                topologies = None
+
+            # Fetch LLDP neighbor info for all ports on this session's chassis
+            try:
+                lldp_map = fetch_lldp_map(raw_sess.Ixnetwork)
+            except Exception:  # noqa: BLE001
+                lldp_map = {}
 
             try:
                 vports = raw_sess.Ixnetwork.Vport.find()
-                ports = _parse_vports(vports)
+                ports = _parse_vports(vports, topologies, lldp_map)
             except Exception:  # noqa: BLE001
                 ports = []
 
-            # Data-plane detection requires IxOS chassis config; not wired in
-            # MVP — always False until chassis config support is added.
-            dp_active = False
+            # Preserve user-set tags across poll cycles.
+            # Tags are written by PATCH /sessions/{server}/{id}/tags and must
+            # not be clobbered when the poller refreshes port/plane data.
+            existing = state.get_session(server_cfg.name, sess_id)
+            preserved_tags = existing.tags if existing is not None else []
 
+            # Session-level cp_active / dp_active / utilized are derived from
+            # ports by the Session model_validator — not set explicitly here.
             session = Session(
                 id=sess_id,
                 name=sess_name,
+                username=sess_username,
                 ixnet_server=server_cfg.name,
                 ports=ports,
-                cp_active=cp_active,
-                dp_active=dp_active,
+                tags=preserved_tags,
                 last_polled=now,
             )
             state.upsert_session(session)
@@ -131,12 +218,36 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Sessio
 
 
 async def _run_poll_cycle(app: FastAPI) -> None:
-    """Execute one full poll cycle across all configured IxNetwork servers."""
+    """Execute one full poll cycle across all servers stored in the DB."""
     app.state.is_polling = True
     try:
         clear_metrics()
         loop = asyncio.get_event_loop()
-        for server_cfg in app.state.config.ixnet_servers:
+        # Read servers from DB — picks up any servers added via the UI at runtime.
+        servers = app.state.fleet.list_servers()
+        if not servers:
+            logger.warning("Poller: no servers configured — skipping poll cycle.")
+        for server_cfg in servers:
+            try:
+                web_snap = await loop.run_in_executor(
+                    None, check_ixnetwork_web, server_cfg
+                )
+                app.state.ixnetwork_web_status[server_cfg.name] = web_snap.model_dump(
+                    mode="json"
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error(
+                    "IxNetwork Web probe error for server '%s': %s", server_cfg.name, exc
+                )
+                now = datetime.now(timezone.utc)
+                app.state.ixnetwork_web_status[server_cfg.name] = {
+                    "deployment": None,
+                    "heartbeat": "red",
+                    "auth_path": None,
+                    "detail": str(exc),
+                    "checked_at": now.isoformat(),
+                }
+
             try:
                 polled = await loop.run_in_executor(
                     None, poll_server, app.state.fleet, server_cfg
@@ -178,14 +289,31 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     db_path = os.environ.get("IXSE_DB", "ixse.db")
     state = FleetState(db_path=db_path)
 
+    # Seed servers from YAML into DB (INSERT OR IGNORE — never overwrites UI-added entries).
+    yaml_servers = [
+        ServerEntry(
+            name=s.name,
+            host=s.host,
+            username=s.username,
+            password=s.password,
+            rest_port=s.rest_port,
+        )
+        for s in config.ixnet_servers
+    ]
+    state.seed_servers(yaml_servers)
+
     app.state.config = config
     app.state.fleet = state
     app.state.last_polled_at: datetime | None = None
     app.state.is_polling: bool = False
+    app.state.ixnetwork_web_status = {}
 
+    db_server_count = len(state.list_servers())
     logger.info(
-        "IxNetworkSessionExplorer started. Background poller disabled — use POST /poll/trigger to fetch manually. %d server(s) configured.",
-        len(config.ixnet_servers),
+        "IxNetworkSessionExplorer started. %d server(s) in DB (seeded %d from YAML). "
+        "Use POST /poll/trigger to fetch sessions.",
+        db_server_count,
+        len(yaml_servers),
     )
 
     yield
@@ -213,6 +341,7 @@ def create_app() -> FastAPI:
     application.include_router(sessions_router.router)
     application.include_router(chassis_router.router)
     application.include_router(health_router.router)
+    application.include_router(servers_router.router)
 
     # ------------------------------------------------------------------
     # Poll control endpoints (inline — not a separate router)

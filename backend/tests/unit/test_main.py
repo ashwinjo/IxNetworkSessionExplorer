@@ -11,7 +11,7 @@ Coverage:
   3.  POST /poll/trigger — returns "triggered" when not already polling
   4.  POST /poll/trigger — returns "already_polling" when is_polling is True
   5.  GET /metrics — returns Prometheus text with ixse_ prefix
-  6.  GET /sessions — empty fleet returns empty list
+  6.  GET /sessions — config-only server row when DB empty; DB drives list when seeded
   7.  GET /sessions — populated fleet returns all sessions
   8.  GET /sessions?server=X — filters by server
   9.  GET /sessions?tag=bgp — filters by tag
@@ -35,7 +35,7 @@ from fastapi.testclient import TestClient
 from ixse.api.main import create_app
 from ixse.api.state import FleetState
 from ixse.config import AppConfig, IxNetServerConfig, PollerConfig
-from ixse.models import Session, SessionPort
+from ixse.models import ServerEntry, Session, SessionPort
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -108,6 +108,7 @@ def client(fleet: FleetState) -> TestClient:
     application.state.config = make_config()
     application.state.last_polled_at = None
     application.state.is_polling = False
+    application.state.ixnetwork_web_status = {}
 
     return tc
 
@@ -199,6 +200,61 @@ class TestListSessions:
         assert len(servers) == 1
         assert servers[0]["name"] == "ixnet-sv-01"
         assert servers[0]["sessions"] == []
+        assert servers[0]["ixnetwork_web_heartbeat"] == "yellow"
+        assert servers[0]["ixnetwork_web_deployment"] is None
+
+    def test_list_sessions_includes_ixnetwork_web_from_state(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """GET /sessions merges app.state.ixnetwork_web_status into each server row."""
+        fleet.upsert_session(make_session("s1", "ixnet-sv-01"))
+        client.app.state.ixnetwork_web_status = {
+            "ixnet-sv-01": {
+                "deployment": "onChassis",
+                "heartbeat": "green",
+                "auth_path": "/platform/api/v2/auth/session",
+                "detail": None,
+                "checked_at": "2026-05-01T12:00:00+00:00",
+            }
+        }
+        resp = client.get("/sessions/")
+        srv = resp.json()["data"]["servers"][0]
+        assert srv["ixnetwork_web_deployment"] == "onChassis"
+        assert srv["ixnetwork_web_heartbeat"] == "green"
+        assert srv["ixnetwork_web_auth_path"] == "/platform/api/v2/auth/session"
+        assert srv["ixnetwork_web_detail"] is None
+        assert srv["ixnetwork_web_checked_at"] == "2026-05-01T12:00:00+00:00"
+
+    def test_db_only_server_row_merges_ixnetwork_web_status(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """Servers added via UI (SQLite) must appear on GET /sessions and match probe keys."""
+        fleet.upsert_server(
+            ServerEntry(
+                name="ui-new",
+                host="10.2.2.2",
+                username="admin",
+                password="pw",
+                rest_port=11009,
+            )
+        )
+        client.app.state.ixnetwork_web_status = {
+            "ui-new": {
+                "deployment": "standalone",
+                "heartbeat": "green",
+                "auth_path": "/ixnetworkweb/api/v1/auth/session",
+                "detail": None,
+                "checked_at": "2026-05-08T00:00:00+00:00",
+            }
+        }
+        resp = client.get("/sessions/")
+        servers = resp.json()["data"]["servers"]
+        by_name = {s["name"]: s for s in servers}
+        assert "ui-new" in by_name
+        assert by_name["ui-new"]["host"] == "10.2.2.2"
+        assert by_name["ui-new"]["sessions"] == []
+        assert by_name["ui-new"]["ixnetwork_web_deployment"] == "standalone"
+        assert by_name["ui-new"]["ixnetwork_web_heartbeat"] == "green"
 
     def test_returns_all_sessions(
         self, client: TestClient, fleet: FleetState

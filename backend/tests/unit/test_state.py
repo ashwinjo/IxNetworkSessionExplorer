@@ -33,8 +33,14 @@ from ixse.api.state import FleetState, StateError
 UTC = timezone.utc
 
 
-def make_port(chassis: str = "lab-01", card: int = 1, port: int = 1) -> SessionPort:
-    return SessionPort(chassis_name=chassis, card=card, port=port)
+def make_port(
+    chassis: str = "lab-01",
+    card: int = 1,
+    port: int = 1,
+    cp_active: bool = False,
+    dp_active: bool = False,
+) -> SessionPort:
+    return SessionPort(chassis_name=chassis, card=card, port=port, cp_active=cp_active, dp_active=dp_active)
 
 
 def make_session(
@@ -46,13 +52,15 @@ def make_session(
     tags: list[str] | None = None,
     ports: list[SessionPort] | None = None,
 ) -> Session:
+    # Session.cp_active/dp_active/utilized are derived from ports by the model_validator;
+    # passing them directly to Session is overridden.  Route through the port instead.
+    if ports is None:
+        ports = [make_port(cp_active=cp_active, dp_active=dp_active)]
     return Session(
         id=session_id,
         name=name,
         ixnet_server=server,
-        ports=ports if ports is not None else [make_port()],
-        cp_active=cp_active,
-        dp_active=dp_active,
+        ports=ports,
         tags=tags if tags is not None else [],
         last_polled=datetime.now(UTC),
     )
@@ -190,12 +198,12 @@ class TestGetSessionsServerFilter:
 
 class TestGetSessionsUtilizedFilter:
     def _populate(self, state: FleetState):
-        # utilized = cp_active AND dp_active
+        # utilized = cp_active OR dp_active
         state.upsert_session(
-            make_session(session_id="u1", cp_active=True, dp_active=True)   # utilized
+            make_session(session_id="u1", cp_active=True, dp_active=True)   # utilized (both)
         )
         state.upsert_session(
-            make_session(session_id="u2", cp_active=True, dp_active=False)  # not utilized
+            make_session(session_id="u2", cp_active=True, dp_active=False)  # utilized (cp only)
         )
         state.upsert_session(
             make_session(session_id="u3", cp_active=False, dp_active=False) # not utilized
@@ -204,15 +212,15 @@ class TestGetSessionsUtilizedFilter:
     def test_utilized_true_filter(self, state: FleetState):
         self._populate(state)
         results = state.get_sessions(utilized=True)
-        assert len(results) == 1
-        assert results[0].id == "u1"
+        assert len(results) == 2
+        ids = {s.id for s in results}
+        assert ids == {"u1", "u2"}
 
     def test_utilized_false_filter(self, state: FleetState):
         self._populate(state)
         results = state.get_sessions(utilized=False)
-        assert len(results) == 2
-        ids = {s.id for s in results}
-        assert ids == {"u2", "u3"}
+        assert len(results) == 1
+        assert results[0].id == "u3"
 
     def test_combined_server_and_utilized_filter(self, state: FleetState):
         state.upsert_session(

@@ -17,6 +17,8 @@ from typing import Any
 
 from pydantic import BaseModel
 
+from ixse.models import LldpPeerInfo
+
 logger = logging.getLogger(__name__)
 
 
@@ -97,6 +99,97 @@ def _with_retry(fn: Any, host: str) -> Any:
     raise ClientError(
         f"Failed to communicate with {host} after {_MAX_RETRIES + 1} attempts: {last_exc}"
     ) from last_exc
+
+
+# ---------------------------------------------------------------------------
+# LLDP helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_location_str(raw: str) -> tuple[str, int, int] | None:
+    """Parse a port Location string into (chassis_ip, card, port).
+
+    Handles all three formats:
+      - "10.36.236.121;6;3"  (semicolon — preferred, Location field)
+      - "10.36.236.121:6:3"  (colon — AssignedTo field)
+      - "//10.36.236.121/6/3" (slash — legacy)
+
+    Returns None when the string is empty or unparseable.
+    """
+    raw = raw.strip()
+    if not raw:
+        return None
+    for sep in (";", ":", "/"):
+        parts = [p for p in raw.split(sep) if p]
+        if len(parts) >= 3:
+            try:
+                return parts[0], int(parts[1]), int(parts[2])
+            except (ValueError, IndexError):
+                continue
+    return None
+
+
+def fetch_lldp_map(ixnetwork_obj: Any) -> dict[tuple[str, int, int], LldpPeerInfo]:
+    """Query IxNetwork Locations API and return per-port LLDP neighbor info.
+
+    Walks ``ixnetwork_obj.Locations.find()`` → ``location.Ports.find()`` and
+    reads all ``Peer*`` attributes from each port object.  Ports whose Location
+    string cannot be parsed are silently skipped.
+
+    Args:
+        ixnetwork_obj: RestPy IxNetwork handle (duck-typed; accepts mock).
+
+    Returns:
+        Mapping of (chassis_ip, card, port) → LldpPeerInfo.
+        Empty dict on any top-level failure so callers can safely fall through.
+    """
+    result: dict[tuple[str, int, int], LldpPeerInfo] = {}
+    try:
+        locations = ixnetwork_obj.Locations.find()
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to fetch IxNetwork Locations for LLDP: %s", exc)
+        return result
+
+    for loc in locations:
+        try:
+            ports = loc.Ports.find()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to fetch Ports for location %s: %s", loc, exc)
+            continue
+
+        for port_obj in ports:
+            location_str = str(getattr(port_obj, "Location", "") or "")
+            parsed = _parse_location_str(location_str)
+            if parsed is None:
+                continue
+            chassis_ip, card, port_num = parsed
+
+            def _safe_str(attr: str) -> str:
+                return str(getattr(port_obj, attr, "") or "")
+
+            def _safe_int(attr: str) -> int:
+                raw = getattr(port_obj, attr, 0)
+                try:
+                    return int(raw)
+                except (TypeError, ValueError):
+                    return 0
+
+            lldp = LldpPeerInfo(
+                peer_chassis_id=_safe_str("PeerChassisId"),
+                peer_description=_safe_str("PeerDescription"),
+                peer_hold_time=_safe_int("PeerHoldTime"),
+                peer_ip_address=_safe_str("PeerIpAddress"),
+                peer_port_id=_safe_str("PeerPortId"),
+                peer_system_name=_safe_str("PeerSystemName"),
+                peer_system_description=_safe_str("PeerSystemDescription"),
+            )
+            result[(chassis_ip, card, port_num)] = lldp
+            logger.debug(
+                "LLDP: %s/%d/%d → peer=%s",
+                chassis_ip, card, port_num, lldp.peer_system_name or "(none)",
+            )
+
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +356,61 @@ class RestPyClient:
             return _with_retry(_fetch, self.host)
         except ClientError:
             raise
+
+    def collect_logs_to_file(self, session_id: str, output_dir: str) -> str:
+        """Collect diagnostic logs for a session and download the zip to *output_dir*.
+
+        Calls ``IxNetwork.CollectLogs`` to bundle all diagnostics on the server,
+        then downloads the resulting ``diagnostic_logs.zip`` into *output_dir*.
+
+        Args:
+            session_id: The numeric session ID string.
+            output_dir:  Local directory path to download the zip into.
+
+        Returns:
+            Absolute path to the downloaded zip file.
+
+        Raises:
+            ClientError: If the session is not found or collection fails.
+        """
+        if not _RESTPY_AVAILABLE:
+            raise ClientError(
+                "ixnetwork_restpy is not installed. "
+                "Install with: pip install ixnetwork-restpy"
+            )
+
+        platform = self._require_connected()
+
+        raw_sessions = platform.Sessions.find()
+        matched = [s for s in raw_sessions if str(s.Id) == session_id]
+        if not matched:
+            raise ClientError(
+                f"Session {session_id!r} not found on server {self.host} — "
+                "cannot collect logs for a session that does not exist"
+            )
+
+        sess = matched[0]
+        ixnetwork = sess.Ixnetwork
+
+        try:
+            from ixnetwork_restpy import Files  # type: ignore[import-untyped]
+
+            logger.info(
+                "Collecting diagnostic logs for session %r on %s", session_id, self.host
+            )
+            ixnetwork.CollectLogs(Arg1=Files("diagnostic_logs"), Arg2="currentInstance")
+            sess.DownloadFile("diagnostic_logs.zip", output_dir)
+        except Exception as exc:
+            raise ClientError(
+                f"Failed to collect logs for session {session_id!r} on {self.host}: {exc}"
+            ) from exc
+
+        import os
+        local_path = os.path.join(output_dir, "diagnostic_logs.zip")
+        logger.info(
+            "Diagnostic logs for session %r downloaded to %s", session_id, local_path
+        )
+        return local_path
 
     def kill_session(self, session_id: str) -> None:
         """Remove an existing session and verify it is gone.

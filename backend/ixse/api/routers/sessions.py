@@ -13,15 +13,19 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import tempfile
 from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from ixse.api.state import FleetState, StateError
 from ixse.client import ClientError, RestPyClient
-from ixse.models import Session
+from ixse.models import ServerEntry, Session
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +49,30 @@ def _session_dict(session: Session) -> dict:
     return session.model_dump(mode="json")
 
 
+def _default_ixnetwork_web_panel() -> dict:
+    return {
+        "ixnetwork_web_deployment": None,
+        "ixnetwork_web_heartbeat": "yellow",
+        "ixnetwork_web_auth_path": None,
+        "ixnetwork_web_detail": "Not probed yet — run a poll cycle.",
+        "ixnetwork_web_checked_at": None,
+        "ixnetwork_version": None,
+    }
+
+
+def _ixnetwork_web_panel_from_state(raw: object) -> dict:
+    if not isinstance(raw, dict):
+        return _default_ixnetwork_web_panel()
+    return {
+        "ixnetwork_web_deployment": raw.get("deployment"),
+        "ixnetwork_web_heartbeat": raw.get("heartbeat", "yellow"),
+        "ixnetwork_web_auth_path": raw.get("auth_path"),
+        "ixnetwork_web_detail": raw.get("detail"),
+        "ixnetwork_web_checked_at": raw.get("checked_at"),
+        "ixnetwork_version": raw.get("ixnetwork_version"),
+    }
+
+
 class TagsUpdateRequest(BaseModel):
     """Body for PATCH /sessions/{server}/{id}/tags."""
 
@@ -65,6 +93,12 @@ async def list_sessions(
 ) -> dict:
     """Return all sessions grouped by server.
 
+    Each server row includes IxNetwork Web probe fields (filled after a poll cycle):
+
+    - ``ixnetwork_web_deployment``: ``standalone`` | ``onChassis`` | null
+    - ``ixnetwork_web_heartbeat``: ``green`` | ``yellow`` | ``red``
+    - ``ixnetwork_web_auth_path``, ``ixnetwork_web_detail``, ``ixnetwork_web_checked_at``
+
     Response shape::
 
         {
@@ -73,7 +107,10 @@ async def list_sessions(
                     "name": "ixnet-server-01",
                     "host": "10.0.0.1",
                     "sessions": [...],
-                    "session_count": 3
+                    "session_count": 3,
+                    "ixnetwork_web_deployment": "standalone",
+                    "ixnetwork_web_heartbeat": "green",
+                    ...
                 }
             ]
         }
@@ -89,35 +126,41 @@ async def list_sessions(
     if tag is not None:
         sessions = [s for s in sessions if tag in s.tags]
 
-    # Build a lookup: server name → host (from live config)
-    host_by_name = {s.name: s.host for s in config.ixnet_servers}
+    # Host labels: start from YAML config, overlay DB (UI-added / updated servers win).
+    host_by_name: dict[str, str] = {s.name: s.host for s in config.ixnet_servers}
+    db_list: list[ServerEntry] = fleet.list_servers()
+    db_names_set = {e.name for e in db_list}
+    for entry in db_list:
+        host_by_name[entry.name] = entry.host
 
-    # Determine which servers to include:
-    # - If ?server filter is active, only that server (even if it has 0 sessions)
-    # - Otherwise, all servers in config (so empty servers still appear)
+    # Server rows must match the poller DB list so ixnetwork_web_status keys align.
+    # Order: DB servers first, then config-only names (e.g. tests / pre-seed edge cases).
     if server is not None:
-        server_names = [server]
+        server_names_ordered = [server]
     else:
-        server_names = [s.name for s in config.ixnet_servers]
+        server_names_ordered = [e.name for e in db_list]
+        for s in config.ixnet_servers:
+            if s.name not in db_names_set:
+                server_names_ordered.append(s.name)
 
-    # Group sessions by ixnet_server name
-    sessions_by_server: dict[str, list[Session]] = {name: [] for name in server_names}
+    sessions_by_server: dict[str, list[Session]] = {name: [] for name in server_names_ordered}
     for sess in sessions:
-        if sess.ixnet_server in sessions_by_server:
-            sessions_by_server[sess.ixnet_server].append(sess)
-        else:
-            # Session from a server not in current config (stale DB row) — include anyway
-            sessions_by_server.setdefault(sess.ixnet_server, []).append(sess)
+        if sess.ixnet_server not in sessions_by_server:
+            sessions_by_server[sess.ixnet_server] = []
+        sessions_by_server[sess.ixnet_server].append(sess)
 
-    servers_payload = [
-        {
+    web_by: dict = getattr(request.app.state, "ixnetwork_web_status", {}) or {}
+
+    servers_payload = []
+    for name, slist in sessions_by_server.items():
+        row = {
             "name": name,
             "host": host_by_name.get(name, name),
             "sessions": [_session_dict(s) for s in slist],
             "session_count": len(slist),
         }
-        for name, slist in sessions_by_server.items()
-    ]
+        row.update(_ixnetwork_web_panel_from_state(web_by.get(name)))
+        servers_payload.append(row)
 
     return _ok({"servers": servers_payload})
 
@@ -222,3 +265,72 @@ async def delete_session(
         pass  # Already evicted (e.g. by a concurrent poll) — safe to ignore
 
     return _ok({"message": f"Session '{session_id}' on server '{server}' deleted."})
+
+
+@router.post("/{server}/{session_id}/collect-logs", summary="Collect diagnostic logs")
+async def collect_session_logs(
+    request: Request,
+    server: str,
+    session_id: str,
+) -> FileResponse:
+    """Trigger IxNetwork log collection for a session and return the zip file.
+
+    Calls ``IxNetwork.CollectLogs`` on the server, downloads the resulting
+    ``diagnostic_logs.zip``, and streams it back to the caller as a file
+    attachment.  The temporary file is cleaned up after the response is sent.
+    """
+    fleet: FleetState = request.app.state.fleet
+    config = request.app.state.config
+
+    if fleet.get_session(server, session_id) is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Session '{session_id}' on server '{server}' not found.",
+        )
+
+    server_cfg = next(
+        (s for s in config.ixnet_servers if s.name == server), None
+    )
+    if server_cfg is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Server '{server}' not found in configuration.",
+        )
+
+    tmpdir = tempfile.mkdtemp(prefix="ixse_logs_")
+    zip_path: str | None = None
+
+    def _collect() -> str:
+        client = RestPyClient(
+            server_cfg.host, server_cfg.username, server_cfg.password, server_cfg.rest_port
+        )
+        client.connect()
+        try:
+            return client.collect_logs_to_file(session_id, tmpdir)
+        finally:
+            client.disconnect()
+
+    loop = asyncio.get_event_loop()
+    try:
+        zip_path = await loop.run_in_executor(None, _collect)
+    except ClientError as exc:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+        logger.error(
+            "Log collection failed for session '%s' on '%s': %s", session_id, server, exc
+        )
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    def _cleanup() -> None:
+        import shutil
+        shutil.rmtree(tmpdir, ignore_errors=True)
+
+    safe_name = "".join(c if c.isalnum() or c in "-_." else "_" for c in f"{server}_{session_id}")
+    download_name = f"diagnostic_logs_{safe_name}.zip"
+
+    return FileResponse(
+        path=zip_path,
+        media_type="application/zip",
+        filename=download_name,
+        background=BackgroundTask(_cleanup),
+    )

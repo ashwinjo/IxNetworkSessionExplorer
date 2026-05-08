@@ -4,7 +4,7 @@ Plane detection logic: control plane (CP) and data plane (DP) activity.
 Provides pure functions for determining whether an IxNetwork session has
 active protocols (CP) and/or active traffic (DP).
 
-Utilization = CP_ACTIVE AND DP_ACTIVE.
+Utilization = CP_ACTIVE OR DP_ACTIVE.
 
 Design notes:
 - detect_cp accepts any duck-typed RestPy session object (Any) so that unit
@@ -28,8 +28,50 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Shared constants
+# ---------------------------------------------------------------------------
+
+# RestPy 1.x DeviceGroup.Status values that indicate active protocols.
+# (configured | error | mixed | notStarted | started | starting | stopping)
+_ACTIVE_STATUSES = {"started", "starting", "mixed", "stopping"}
+
+
+# ---------------------------------------------------------------------------
 # Control Plane detection
 # ---------------------------------------------------------------------------
+
+
+def detect_cp_per_vport(vport_href: str, topologies: Any) -> bool:
+    """Check if a single vport has active control-plane protocols.
+
+    Walks each topology's Vports list to find topologies that include this
+    vport, then checks their DeviceGroup Status.
+
+    Args:
+        vport_href: The RestPy href of the vport, e.g.
+                    "/api/v1/sessions/3/ixnetwork/vport/1"
+        topologies: RestPy Topology collection from session.Ixnetwork.Topology.find()
+
+    Returns:
+        True if any DeviceGroup in a topology bound to this vport is active.
+    """
+    try:
+        for topo in topologies:
+            topo_vport_hrefs = [str(v) for v in (getattr(topo, "Vports", []) or [])]
+            if vport_href not in topo_vport_hrefs:
+                continue
+            for dg in topo.DeviceGroup.find():
+                status = getattr(dg, "Status", None) or getattr(dg, "SessionStatus", None)  # noqa: SIM910
+                if status is None:
+                    continue
+                if isinstance(status, list):
+                    if any(s in _ACTIVE_STATUSES for s in status):
+                        return True
+                elif status in _ACTIVE_STATUSES:
+                    return True
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Per-vport CP detection failed for %s: %s", vport_href, exc)
+    return False
 
 
 def detect_cp(session_obj: Any) -> bool:
@@ -52,10 +94,6 @@ def detect_cp(session_obj: Any) -> bool:
     Returns:
         True if ANY device group has a protocol running, False otherwise.
     """
-    # Statuses that indicate protocols are active (RestPy 1.x DeviceGroup.Status values:
-    # configured | error | mixed | notStarted | started | starting | stopping)
-    _ACTIVE_STATUSES = {"started", "starting", "mixed", "stopping"}
-
     try:
         topologies = session_obj.Topology.find()
         for topo in topologies:
@@ -128,7 +166,7 @@ def compute_plane_status(
 
     Runs detect_cp and detect_dp independently then combines into a
     PlaneStatus whose ``utilized`` field is auto-enforced by the model
-    validator (cp_active AND dp_active).
+    validator (cp_active OR dp_active).
 
     Args:
         session_obj: RestPy IxNetwork session object (duck-typed).
@@ -136,7 +174,7 @@ def compute_plane_status(
         ports: Physical ports belonging to this session.
 
     Returns:
-        PlaneStatus(cp_active, dp_active, utilized=cp_active and dp_active).
+        PlaneStatus(cp_active, dp_active, utilized=cp_active or dp_active).
     """
     cp_active = detect_cp(session_obj)
     dp_active = detect_dp(ixos_client, ports)

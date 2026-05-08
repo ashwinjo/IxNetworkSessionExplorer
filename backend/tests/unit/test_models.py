@@ -4,7 +4,7 @@ Unit tests for ixse/models.py.
 TDD — written before the implementation.
 Coverage:
   1. Session creation with all fields
-  2. utilized auto-computed by model_validator (cp AND dp)
+  2. utilized auto-computed by model_validator (cp OR dp)
   3. SessionPort validates card and port > 0
   4. tags defaults to empty list
   5. PollStatus defaults to None / False
@@ -31,13 +31,17 @@ def make_port(**overrides) -> dict:
 
 
 def make_session(**overrides) -> dict:
+    # cp_active/dp_active on Session are DERIVED from ports by the model_validator;
+    # passing them directly to Session is ignored.  Route them through the port instead.
+    cp_active = overrides.pop("cp_active", True)
+    dp_active = overrides.pop("dp_active", True)
+    overrides.pop("utilized", None)  # silently discard — always recomputed
+
     base = {
         "id": "sess-001",
         "name": "bgp-test",
         "ixnet_server": "ixnet-server-01",
-        "ports": [make_port()],
-        "cp_active": True,
-        "dp_active": True,
+        "ports": [make_port(cp_active=cp_active, dp_active=dp_active)],
         "last_polled": datetime.now(UTC),
     }
     return {**base, **overrides}
@@ -85,12 +89,12 @@ class TestUtilizedComputation:
         "cp, dp, expected",
         [
             (True, True, True),
-            (True, False, False),
-            (False, True, False),
+            (True, False, True),
+            (False, True, True),
             (False, False, False),
         ],
     )
-    def test_session_utilized_is_cp_and_dp(self, cp: bool, dp: bool, expected: bool):
+    def test_session_utilized_is_cp_or_dp(self, cp: bool, dp: bool, expected: bool):
         s = Session(**make_session(cp_active=cp, dp_active=dp))
         assert s.utilized is expected
 
@@ -100,11 +104,11 @@ class TestUtilizedComputation:
         s = Session(**make_session(cp_active=True, dp_active=True, utilized=False))
         assert s.utilized is True
 
-    def test_plane_status_utilized_is_cp_and_dp(self):
+    def test_plane_status_utilized_is_cp_or_dp(self):
         for cp, dp, expected in [
             (True, True, True),
-            (True, False, False),
-            (False, True, False),
+            (True, False, True),
+            (False, True, True),
             (False, False, False),
         ]:
             ps = PlaneStatus(cp_active=cp, dp_active=dp)

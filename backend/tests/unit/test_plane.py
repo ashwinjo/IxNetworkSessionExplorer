@@ -209,8 +209,8 @@ class TestComputePlaneStatus:
         assert result.dp_active is True
         assert result.utilized is True
 
-    # 12. cp=True, dp=False → utilized=False
-    def test_cp_active_dp_inactive_returns_utilized_false(self):
+    # 12. cp=True, dp=False → utilized=True (cp OR dp semantics)
+    def test_cp_active_dp_inactive_returns_utilized_true(self):
         sess = _make_session_obj([_make_topo("started")])
         port = _make_port()
         stats = PortStats(tx_frames=0, rx_frames=0, port_state="up")
@@ -220,10 +220,10 @@ class TestComputePlaneStatus:
 
         assert result.cp_active is True
         assert result.dp_active is False
-        assert result.utilized is False
+        assert result.utilized is True  # cp OR dp → True
 
-    # Extra: cp=False, dp=True → utilized=False
-    def test_cp_inactive_dp_active_returns_utilized_false(self):
+    # Extra: cp=False, dp=True → utilized=True (cp OR dp semantics)
+    def test_cp_inactive_dp_active_returns_utilized_true(self):
         sess = _make_session_obj([_make_topo("notStarted")])
         port = _make_port()
         stats = PortStats(tx_frames=0, rx_frames=500, port_state="up")
@@ -233,7 +233,7 @@ class TestComputePlaneStatus:
 
         assert result.cp_active is False
         assert result.dp_active is True
-        assert result.utilized is False
+        assert result.utilized is True  # cp OR dp → True
 
     # Extra: both inactive → utilized=False
     def test_both_inactive_returns_utilized_false(self):

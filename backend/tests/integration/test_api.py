@@ -65,13 +65,20 @@ def _make_session(
     dp_active: bool = False,
     tags: list[str] | None = None,
 ) -> Session:
+    ports = [
+        SessionPort(
+            chassis_name="lab-01",
+            card=1,
+            port=1,
+            cp_active=cp_active,
+            dp_active=dp_active,
+        )
+    ]
     return Session(
         id=session_id,
         name=name,
         ixnet_server=server,
-        ports=[SessionPort(chassis_name="lab-01", card=1, port=1)],
-        cp_active=cp_active,
-        dp_active=dp_active,
+        ports=ports,
         tags=tags or [],
         last_polled=datetime.now(UTC),
     )
@@ -113,6 +120,7 @@ def api_client(fleet: FleetState) -> TestClient:
     application.state.config = _make_config()
     application.state.last_polled_at = None
     application.state.is_polling = False
+    application.state.ixnetwork_web_status = {}
 
     return tc
 
@@ -158,6 +166,7 @@ class TestSessionsCRUD:
         assert any(s["name"] == "ixnet-sv-01" for s in servers)
         sv = next(s for s in servers if s["name"] == "ixnet-sv-01")
         assert sv["sessions"] == []
+        assert sv["ixnetwork_web_heartbeat"] == "yellow"
 
     def test_upserted_sessions_appear_in_list(
         self, api_client: TestClient, fleet: FleetState
