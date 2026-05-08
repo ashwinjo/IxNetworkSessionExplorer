@@ -532,6 +532,28 @@ header .logo-icon {
   border-color: var(--color-accent);
 }
 
+/* Inline error message inside modals */
+.modal-error {
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: var(--radius);
+  color: #fca5a5;
+  font-size: 0.8rem;
+  margin-top: 10px;
+  padding: 7px 12px;
+}
+
+/* Boolean status cells inside details modal dl */
+.detail-ok {
+  color: var(--color-ok);
+  font-weight: 700;
+}
+
+.detail-err {
+  color: var(--color-err);
+  font-weight: 700;
+}
+
 /* Kill confirmation warning */
 .kill-warning {
   background: rgba(239, 68, 68, 0.1);
