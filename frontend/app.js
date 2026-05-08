@@ -20,7 +20,35 @@ let _autoTimer  = null;   // setInterval handle
 let _tagTarget  = null;   // session targeted by tag modal
 let _killTarget = null;   // session targeted by kill modal
 
+// Keyed by `${ixnet_server}/${id}` — populated on each renderServers() call.
+// Allows event-delegated button handlers to retrieve the full session object
+// without embedding serialized JSON in HTML attributes (XSS mitigation).
+const _sessionCache = new Map();
+
 const AUTO_REFRESH_INTERVAL_MS = 30_000;
+
+// ---------------------------------------------------------------------------
+// Event delegation — session action buttons
+// ---------------------------------------------------------------------------
+// A single listener on the static container handles Details / Tag / Kill for
+// every dynamically rendered session row.  Session data comes from
+// _sessionCache (populated by buildSessionTable) — no JSON in the DOM.
+
+document.getElementById("servers-container").addEventListener("click", e => {
+  const btn = e.target.closest(".btn-action");
+  if (!btn) return;
+
+  const { action, sessionId, server } = btn.dataset;
+  const session = _sessionCache.get(`${server}/${sessionId}`);
+  if (!session) {
+    console.warn(`btn-action: session not found in cache for key "${server}/${sessionId}"`);
+    return;
+  }
+
+  if (action === "details") showDetailsModal(session);
+  else if (action === "tag")  showTagModal(session);
+  else if (action === "kill") showKillConfirm(session);
+});
 
 // ---------------------------------------------------------------------------
 // API helpers
@@ -118,6 +146,9 @@ async function triggerRefresh() {
 function renderServers(data) {
   const container = document.getElementById("servers-container");
 
+  // Clear stale cache before each full render so removed sessions don't linger.
+  _sessionCache.clear();
+
   if (!data || !data.servers || data.servers.length === 0) {
     container.innerHTML = `<div class="state-empty">No servers found. Check your configuration.</div>`;
     return;
@@ -160,7 +191,7 @@ function buildServerBlock(server) {
       <span class="server-session-count">${sessionCount} session${sessionCount !== 1 ? "s" : ""}</span>
     </div>
     <div class="server-sessions" id="sessions-${sanitizeId(server.name)}">
-      ${buildSessionTable(server.sessions ?? [])}
+      ${buildSessionTable(server.sessions ?? [], server.name)}
     </div>
   `;
 
@@ -180,15 +211,25 @@ function buildServerBlock(server) {
 /**
  * buildSessionTable — render the <table> for a server's sessions.
  *
- * @param {Array} sessions
+ * Populates _sessionCache keyed by `${ixnet_server}/${id}` so that the
+ * event-delegation handler in renderServers can retrieve full session objects
+ * without any serialized JSON in the HTML.
+ *
+ * @param {Array}  sessions   — array of session objects
+ * @param {string} serverName — canonical server name (from server.name)
  * @returns {string} HTML string
  */
-function buildSessionTable(sessions) {
+function buildSessionTable(sessions, serverName) {
   if (sessions.length === 0) {
     return `<div class="state-empty" style="padding:20px 16px;">No sessions on this server.</div>`;
   }
 
-  const rows = sessions.map(s => renderSessionRow(s)).join("");
+  const rows = sessions.map(s => {
+    // Ensure ixnet_server is set on the session object (may come from parent).
+    const session = s.ixnet_server ? s : { ...s, ixnet_server: serverName };
+    _sessionCache.set(`${session.ixnet_server}/${session.id}`, session);
+    return renderSessionRow(session);
+  }).join("");
 
   return `
     <table class="sessions-table">
@@ -213,7 +254,12 @@ function buildSessionTable(sessions) {
 /**
  * renderSessionRow — render a single <tr> for one session.
  *
- * @param {Object} session — { id, name, chassis, ports, cp_active, dp_active, utilized, tags }
+ * Buttons use data-action / data-session-id / data-server attributes.
+ * No inline event handlers or serialized JSON appear in the HTML — the full
+ * session object is retrieved from _sessionCache by the delegated listener on
+ * #servers-container.
+ *
+ * @param {Object} session — { id, ixnet_server, name, chassis, ports, cp_active, dp_active, utilized, tags }
  * @returns {string} HTML string
  */
 function renderSessionRow(session) {
@@ -230,8 +276,11 @@ function renderSessionRow(session) {
     ? `<div class="tag-list">${session.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>`
     : "";
 
+  const sid    = escapeHtml(String(session.id));
+  const server = escapeHtml(session.ixnet_server ?? "");
+
   return `
-    <tr data-session-id="${escapeHtml(String(session.id))}" data-server="${escapeHtml(session.server ?? "")}">
+    <tr data-session-id="${sid}" data-server="${server}">
       <td class="col-session">
         <span class="session-name">${escapeHtml(session.name)}</span>
         ${tagsHtml}
@@ -247,9 +296,18 @@ function renderSessionRow(session) {
       </td>
       <td class="col-actions">
         <div class="actions-cell">
-          <button class="btn btn-details" onclick="showDetailsModal(${JSON.stringify(JSON.stringify(session))})">Details</button>
-          <button class="btn btn-tag"     onclick="showTagModal(${JSON.stringify(JSON.stringify(session))})">Tag</button>
-          <button class="btn btn-kill"    onclick="showKillConfirm(${JSON.stringify(JSON.stringify(session))})">Kill</button>
+          <button class="btn btn-details btn-action"
+                  data-action="details"
+                  data-session-id="${sid}"
+                  data-server="${server}">Details</button>
+          <button class="btn btn-tag btn-action"
+                  data-action="tag"
+                  data-session-id="${sid}"
+                  data-server="${server}">Tag</button>
+          <button class="btn btn-kill btn-action"
+                  data-action="kill"
+                  data-session-id="${sid}"
+                  data-server="${server}">Kill</button>
         </div>
       </td>
     </tr>
@@ -352,10 +410,9 @@ function toggleAutoRefresh() {
 /**
  * showDetailsModal — display full session detail in the details modal.
  *
- * @param {string|Object} sessionJson — JSON string or session object
+ * @param {Object} session — session object from _sessionCache
  */
-function showDetailsModal(sessionJson) {
-  const session = typeof sessionJson === "string" ? JSON.parse(sessionJson) : sessionJson;
+function showDetailsModal(session) {
 
   const body = document.getElementById("modal-details-body");
   const portsDisplay = Array.isArray(session.ports)
@@ -382,10 +439,9 @@ function showDetailsModal(sessionJson) {
 /**
  * showTagModal — display the tag-addition modal for a session.
  *
- * @param {string|Object} sessionJson
+ * @param {Object} session — session object from _sessionCache
  */
-function showTagModal(sessionJson) {
-  const session = typeof sessionJson === "string" ? JSON.parse(sessionJson) : sessionJson;
+function showTagModal(session) {
   _tagTarget = session;
 
   document.getElementById("modal-tag-session-name").textContent = session.name ?? session.id;
@@ -404,10 +460,9 @@ function showTagModal(sessionJson) {
 /**
  * showKillConfirm — display the kill-confirmation modal.
  *
- * @param {string|Object} sessionJson
+ * @param {Object} session — session object from _sessionCache
  */
-function showKillConfirm(sessionJson) {
-  const session = typeof sessionJson === "string" ? JSON.parse(sessionJson) : sessionJson;
+function showKillConfirm(session) {
   _killTarget = session;
 
   document.getElementById("modal-kill-session-name").textContent =
