@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from pydantic import AwareDatetime, BaseModel, Field, model_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
 
 class SessionPort(BaseModel):
@@ -27,17 +27,24 @@ class SessionPort(BaseModel):
 class PlaneStatus(BaseModel):
     """Control plane + data plane activity status for a session."""
 
+    model_config = ConfigDict(frozen=True)
+
     cp_active: bool = Field(..., description="True when control-plane protocols are started")
     dp_active: bool = Field(..., description="True when data-plane traffic is flowing")
-    utilized: bool = Field(default=False, description="cp_active AND dp_active (auto-computed)")
+    utilized: bool = Field(
+        default=False,
+        description="cp_active AND dp_active (auto-computed)",
+        json_schema_extra={"readOnly": True, "computed": True},
+    )
 
     @model_validator(mode="after")
     def compute_utilized(self) -> "PlaneStatus":
         """Recompute utilized so it always equals cp_active AND dp_active.
 
+        Uses object.__setattr__ because frozen=True blocks normal assignment.
         This runs after field assignment, overwriting any caller-supplied value.
         """
-        self.utilized = self.cp_active and self.dp_active
+        object.__setattr__(self, "utilized", self.cp_active and self.dp_active)
         return self
 
 
@@ -52,7 +59,11 @@ class Session(BaseModel):
     )
     cp_active: bool = Field(..., description="Control-plane protocols active")
     dp_active: bool = Field(..., description="Data-plane traffic running")
-    utilized: bool = Field(default=False, description="cp_active AND dp_active (auto-computed)")
+    utilized: bool = Field(
+        default=False,
+        description="cp_active AND dp_active (auto-computed)",
+        json_schema_extra={"readOnly": True, "computed": True},
+    )
     tags: list[str] = Field(default_factory=list, description="Operator-assigned labels")
     last_polled: AwareDatetime = Field(
         ..., description="UTC timestamp of the last successful poll"
