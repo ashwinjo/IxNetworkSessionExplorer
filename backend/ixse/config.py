@@ -77,14 +77,17 @@ class AppConfig(BaseModel):
 # Environment variable interpolation
 # ---------------------------------------------------------------------------
 
-_ENV_VAR_PATTERN = re.compile(r"\$\{([^}]+)\}")
+_ENV_VAR_PATTERN = re.compile(r"\$\{([A-Z_][A-Z0-9_]*)\}")
+_INVALID_VAR_PATTERN = re.compile(r"\$\{([^}]*)\}")
 
 
 def _interpolate_string(value: str, config_path: Path) -> str:
     """
     Replace all ${VAR_NAME} markers in *value* with their environment values.
 
-    Raises ConfigError immediately if any referenced variable is unset.
+    Variable names must match [A-Z_][A-Z0-9_]* (uppercase, digits, underscores).
+    Raises ConfigError immediately if any referenced variable is unset or if
+    a ${...} marker contains an invalid variable name.
     """
     def replacer(match: re.Match[str]) -> str:
         var_name = match.group(1)
@@ -97,7 +100,15 @@ def _interpolate_string(value: str, config_path: Path) -> str:
             )
         return resolved
 
-    return _ENV_VAR_PATTERN.sub(replacer, value)
+    result = _ENV_VAR_PATTERN.sub(replacer, value)
+    # Check for remaining ${...} that didn't match the strict pattern (invalid var name syntax)
+    invalid = _INVALID_VAR_PATTERN.findall(result)
+    if invalid:
+        raise ConfigError(
+            f"Invalid environment variable syntax in config {config_path}: "
+            f"'${{{invalid[0]}}}' — variable names must match [A-Z_][A-Z0-9_]*"
+        )
+    return result
 
 
 def _interpolate_value(value: Any, config_path: Path) -> Any:
@@ -170,10 +181,7 @@ def load_config(path: str | Path) -> AppConfig:
         )
 
     # Step 3: interpolate env vars (fail fast — raises ConfigError on first missing var)
-    try:
-        interpolated = _interpolate_value(raw_data, config_path)
-    except ConfigError:
-        raise  # already has a useful message
+    interpolated = _interpolate_value(raw_data, config_path)
 
     # Step 4: Pydantic validation
     try:

@@ -247,6 +247,38 @@ class TestMissingEnvVar:
         with pytest.raises(ConfigError):
             load_config(cfg_file)
 
+    def test_invalid_var_name_syntax_raises_config_error(self, tmp_path: Path) -> None:
+        """${...} with invalid variable name (lowercase, spaces, special chars) raises ConfigError."""
+        cfg_file = _write_yaml(tmp_path, """
+            ixnet_servers:
+              - name: srv-01
+                host: 10.1.1.1
+                username: admin
+                password: ${ MY_VAR }
+        """)
+
+        with pytest.raises(ConfigError) as exc_info:
+            load_config(cfg_file)
+
+        error_msg = str(exc_info.value)
+        assert "Invalid environment variable syntax" in error_msg
+        assert "[A-Z_][A-Z0-9_]*" in error_msg
+
+    def test_lowercase_var_name_raises_config_error(self, tmp_path: Path) -> None:
+        """${lowercase_var} does not match the strict pattern and raises ConfigError."""
+        cfg_file = _write_yaml(tmp_path, """
+            ixnet_servers:
+              - name: srv-01
+                host: 10.1.1.1
+                username: admin
+                password: ${ixnet_password}
+        """)
+
+        with pytest.raises(ConfigError) as exc_info:
+            load_config(cfg_file)
+
+        assert "Invalid environment variable syntax" in str(exc_info.value)
+
 
 # ---------------------------------------------------------------------------
 # 4. Missing required field raises ConfigError
