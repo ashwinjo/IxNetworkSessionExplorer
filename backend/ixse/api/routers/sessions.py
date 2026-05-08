@@ -151,7 +151,7 @@ async def delete_session(
         )
 
     def _kill() -> None:
-        client = RestPyClient(server_cfg.host, server_cfg.username, server_cfg.password)
+        client = RestPyClient(server_cfg.host, server_cfg.username, server_cfg.password, server_cfg.rest_port)
         client.connect()
         try:
             client.kill_session(session_id)

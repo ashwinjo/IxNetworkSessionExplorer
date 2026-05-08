@@ -85,7 +85,7 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Sessio
 
     Returns the list of sessions upserted during this cycle (for metrics).
     """
-    client = RestPyClient(server_cfg.host, server_cfg.username, server_cfg.password)
+    client = RestPyClient(server_cfg.host, server_cfg.username, server_cfg.password, server_cfg.rest_port)
     client.connect()
     try:
         now = datetime.now(timezone.utc)

@@ -44,6 +44,7 @@ class IxNetServerConfig(BaseModel):
     host: str
     username: str
     password: str  # resolved from env at load time
+    rest_port: int | None = None  # None = let RestPy auto-detect (tries 11009 then 443)
 
     @field_validator("name", "host", "username", "password", mode="before")
     @classmethod

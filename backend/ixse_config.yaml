@@ -10,9 +10,8 @@ ixnet_servers:
   - name: ixnet-server-01
     host: 10.36.236.121
     username: admin
-    # Use environment variables for sensitive data
-    # Set before running: export IXNET_PASSWORD="your-password"
     password: "Kimchi123Kimchi123!"
+    rest_port: 443
 
   # Example: second server
   # - name: ixnet-server-02

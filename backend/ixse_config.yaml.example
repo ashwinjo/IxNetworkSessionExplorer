@@ -10,9 +10,9 @@ ixnet_servers:
   - name: ixnet-server-01
     host: 10.1.1.100
     username: admin
-    # Use environment variables for sensitive data
-    # Set before running: export IXNET_PASSWORD="your-password"
     password: ${IXNET_PASSWORD}
+    # rest_port: 443   # Uncomment for HTTPS-only servers (skips HTTP/11009 retries)
+    # rest_port: 11009 # Default classic IxNetwork port (HTTP)
 
   # Example: second server
   # - name: ixnet-server-02

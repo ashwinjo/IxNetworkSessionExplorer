@@ -142,17 +142,20 @@ class RestPyClient:
     own — the caller (background poller) is responsible for synchronisation.
     """
 
-    def __init__(self, host: str, username: str, password: str) -> None:
+    def __init__(self, host: str, username: str, password: str, rest_port: int | None = None) -> None:
         """Store connection parameters. Does not connect (lazy connect pattern).
 
         Args:
             host: IxNetwork server IP or hostname.
             username: Authentication username.
             password: Authentication password.
+            rest_port: REST API port. None lets RestPy auto-detect (tries 11009
+                       then 443). Use 443 for HTTPS-only servers.
         """
         self.host = host
         self.username = username
         self.password = password
+        self.rest_port = rest_port
         self._assistant: Any | None = None  # set by connect()
 
     # ------------------------------------------------------------------
@@ -173,12 +176,16 @@ class RestPyClient:
             )
 
         try:
-            self._assistant = SessionAssistant(
+            kwargs: dict[str, Any] = dict(
                 IpAddress=self.host,
                 UserName=self.username,
                 Password=self.password,
                 LogLevel="warning",
             )
+            if self.rest_port is not None:
+                kwargs["RestPort"] = self.rest_port
+
+            self._assistant = SessionAssistant(**kwargs)
             logger.info("Connected to IxNetwork server %s", self.host)
         except Exception as exc:
             raise ClientError(
