@@ -16,11 +16,13 @@ import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response
+from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ixse.api.metrics import (
@@ -219,10 +221,6 @@ def create_app() -> FastAPI:
     application.include_router(chassis_router.router)
     application.include_router(health_router.router)
 
-    @application.get("/", include_in_schema=False)
-    async def root() -> RedirectResponse:
-        return RedirectResponse(url="/docs")
-
     # ------------------------------------------------------------------
     # Poll control endpoints (inline — not a separate router)
     # ------------------------------------------------------------------
@@ -273,6 +271,26 @@ def create_app() -> FastAPI:
             content=generate_latest(registry),
             media_type=CONTENT_TYPE_LATEST,
         )
+
+    # ------------------------------------------------------------------
+    # Frontend static files — mounted LAST so all API routes take priority.
+    # StaticFiles with html=True serves index.html for "/" and any path
+    # that doesn't match an existing file.
+    # Resolved: backend/ixse/api/main.py → ../../../../frontend
+    # ------------------------------------------------------------------
+
+    _frontend_dir = Path(__file__).parent.parent.parent.parent / "frontend"
+
+    if _frontend_dir.exists():
+        application.mount(
+            "/",
+            StaticFiles(directory=str(_frontend_dir), html=True),
+            name="frontend",
+        )
+    else:
+        @application.get("/", include_in_schema=False)
+        async def root() -> RedirectResponse:
+            return RedirectResponse(url="/docs")
 
     return application
 
