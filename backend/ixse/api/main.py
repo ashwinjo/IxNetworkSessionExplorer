@@ -20,7 +20,7 @@ from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import RedirectResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from ixse.api.metrics import (
@@ -218,6 +218,10 @@ def create_app() -> FastAPI:
     application.include_router(sessions_router.router)
     application.include_router(chassis_router.router)
     application.include_router(health_router.router)
+
+    @application.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        return RedirectResponse(url="/docs")
 
     # ------------------------------------------------------------------
     # Poll control endpoints (inline — not a separate router)

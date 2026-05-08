@@ -177,11 +177,7 @@ class RestPyClient:
                 IpAddress=self.host,
                 UserName=self.username,
                 Password=self.password,
-                RestPort=None,
-                Timeout=10,
-                LogLevel=SessionAssistant.LOGLEVEL_WARNING
-                if hasattr(SessionAssistant, "LOGLEVEL_WARNING")
-                else "warning",
+                LogLevel="warning",
             )
             logger.info("Connected to IxNetwork server %s", self.host)
         except Exception as exc:
