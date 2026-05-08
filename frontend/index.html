@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IxNetwork Session Explorer</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='5' fill='%230b0f14'/><rect width='32' height='32' rx='5' fill='none' stroke='%2300c8e8' stroke-width='1.5' stroke-opacity='0.4'/><text x='3' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%2300c8e8'>Ix</text><text x='3' y='30' font-family='monospace' font-size='9' font-weight='500' fill='%238baabb' letter-spacing='1'>NSE</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ================================================================
+       HEADER
+       ================================================================ -->
+  <header>
+    <div class="header-left">
+      <div class="logo-mark" aria-hidden="true">
+        <span class="logo-ix">Ix</span><span class="logo-se">NSE</span>
+      </div>
+      <div class="header-divider" aria-hidden="true"></div>
+      <div class="header-title-group">
+        <h1>IxNetwork Session Explorer</h1>
+        <span class="header-sub">NETWORK OPERATIONS CONSOLE</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <button id="btn-manage-servers" class="btn btn-neutral" title="Add or manage IxNetwork servers">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="14" height="4" rx="1"/><rect x="1" y="9" width="14" height="4" rx="1"/><circle cx="4" cy="5" r=".8" fill="currentColor" stroke="none"/><circle cx="4" cy="11" r=".8" fill="currentColor" stroke="none"/></svg>
+        Manage Servers
+      </button>
+      <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
+        <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+      </svg>
+      <div class="live-badge">
+        <span class="live-dot"></span>
+        <span class="live-text">LIVE</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ================================================================
+       CONTROL BAR
+       ================================================================ -->
+  <div id="control-bar">
+    <div class="cb-prompt" aria-hidden="true"><span class="prompt-chevron">›</span></div>
+
+    <span id="last-polled">
+      polled <span id="poll-timestamp">—</span>
+    </span>
+
+    <div class="cb-sep" aria-hidden="true"></div>
+
+    <div class="control-group">
+      <button id="btn-refresh" class="btn btn-primary" title="Trigger a manual poll and refresh">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 8A5.5 5.5 0 1 1 8 2.5c1.8 0 3.4.87 4.4 2.2"/><path d="M10.5 4.5H13V2"/></svg>
+        Refresh
+      </button>
+      <button id="btn-expand-all" class="btn btn-neutral">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 6l5 4 5-4"/><path d="M3 3h10M3 13h10"/></svg>
+        Expand All
+      </button>
+      <button id="btn-collapse-all" class="btn btn-neutral">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 10l5-4 5 4"/><path d="M3 3h10M3 13h10"/></svg>
+        Collapse All
+      </button>
+    </div>
+
+    <div class="control-group">
+      <button id="btn-auto-refresh" class="btn btn-toggle"
+              title="Toggle 30-second auto-refresh"
+              aria-pressed="false">
+        <span class="toggle-pip" aria-hidden="true"></span>
+        Auto-refresh: OFF
+      </button>
+    </div>
+
+    <div id="search-wrapper">
+      <svg class="search-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3"/></svg>
+      <label for="search-input" class="label sr-only">Search</label>
+      <input
+        type="search"
+        id="search-input"
+        placeholder="session · chassis · tag…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MAIN CONTENT — populated by app.js
+       ================================================================ -->
+  <main id="main-content">
+    <div id="servers-container">
+      <div class="state-loading">
+        <span class="spinner"></span> Establishing connection…
+      </div>
+    </div>
+  </main>
+
+  <!-- ================================================================
+       MODAL: Tag Session
+       ================================================================ -->
+  <div id="modal-tag" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-tag-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-tag-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2H14V7L7.5 13.5a1.4 1.4 0 01-2 0l-3-3a1.4 1.4 0 010-2L9 2z"/><circle cx="11.5" cy="4.5" r=".8" fill="currentColor" stroke="none"/></svg>
+        Tag Session
+      </div>
+      <div class="modal-body">
+        <p id="modal-tag-session-name" class="modal-session-id"></p>
+        <label for="tag-input-field" class="modal-label">Tag name:</label>
+        <input type="text" id="tag-input-field" placeholder="bgp, lab-a, owner:ashwin  (comma-separated)" />
+        <div id="modal-tag-existing" class="tag-list" style="margin-top:10px;"></div>
+        <div id="modal-tag-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-tag">Cancel</button>
+        <button id="btn-tag-remove" class="btn btn-neutral">Remove</button>
+        <button id="btn-tag-add" class="btn btn-primary">Add Tag</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Kill Confirmation
+       ================================================================ -->
+  <div id="modal-kill" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-kill-title">
+    <div class="modal">
+      <div class="modal-title modal-title--danger" id="modal-kill-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v6M8 12v.5"/><circle cx="8" cy="8" r="6.5"/></svg>
+        Terminate Session
+      </div>
+      <div class="modal-body">
+        <div class="kill-warning">
+          <strong>Irreversible.</strong> This will permanently destroy the session and release all reserved ports.
+        </div>
+        <p id="modal-kill-description" class="modal-session-id"></p>
+        <div id="modal-kill-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-kill">Cancel</button>
+        <button id="btn-kill-confirm" class="btn btn-danger">Kill Session</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Manage Servers
+       ================================================================ -->
+  <div id="modal-servers" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-servers-title">
+    <div class="modal modal--wide">
+      <div class="modal-title" id="modal-servers-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="14" height="4" rx="1"/><rect x="1" y="9" width="14" height="4" rx="1"/><circle cx="4" cy="5" r=".8" fill="currentColor" stroke="none"/><circle cx="4" cy="11" r=".8" fill="currentColor" stroke="none"/></svg>
+        Manage IxNetwork Servers
+      </div>
+      <div class="modal-body">
+        <div id="servers-list-area">
+          <div class="state-loading"><span class="spinner"></span> Loading…</div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral modal-close" data-modal="modal-servers">Close</button>
+        <button id="btn-bulk-import" class="btn btn-neutral">
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 12h12"/></svg>
+          Bulk Import
+        </button>
+        <button id="btn-add-server" class="btn btn-primary">
+          <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 2v12M2 8h12"/></svg>
+          Add Server
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Add / Edit Server
+       ================================================================ -->
+  <div id="modal-server-form" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-server-form-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-server-form-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v12M2 8h12"/></svg>
+        <span id="server-form-heading">Add Server</span>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="server-form-mode" value="add" />
+        <input type="hidden" id="server-form-original-name" value="" />
+
+        <div class="form-row">
+          <label for="sf-name" class="modal-label">Name <span class="form-required">*</span></label>
+          <input type="text" id="sf-name" class="modal-input" placeholder="e.g. ixnet-server-01" autocomplete="off" />
+        </div>
+
+        <div class="form-row">
+          <label for="sf-host" class="modal-label">Host / IP <span class="form-required">*</span></label>
+          <input type="text" id="sf-host" class="modal-input" placeholder="e.g. 10.1.1.100" autocomplete="off" />
+        </div>
+
+        <div class="form-row form-row--2col">
+          <div>
+            <label for="sf-username" class="modal-label">Username <span class="form-required">*</span></label>
+            <input type="text" id="sf-username" class="modal-input" placeholder="admin" autocomplete="off" />
+          </div>
+          <div>
+            <label for="sf-port" class="modal-label">REST Port</label>
+            <input type="number" id="sf-port" class="modal-input" placeholder="443 or 11009" min="1" max="65535" />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <label for="sf-password" class="modal-label">Password <span id="sf-password-hint" class="form-hint">(leave blank to keep current)</span></label>
+          <div class="input-password-wrap">
+            <input type="password" id="sf-password" class="modal-input" placeholder="••••••••" autocomplete="new-password" />
+            <button type="button" id="btn-toggle-password" class="btn-pw-toggle" title="Show / hide password" aria-label="Toggle password visibility">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M1 8s3-5 7-5 7 5 7 5-3 5-7 5-7-5-7-5z"/><circle cx="8" cy="8" r="2"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div id="modal-server-form-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral" id="btn-server-form-back">Back</button>
+        <button id="btn-server-form-test" class="btn btn-neutral">Test Connection</button>
+        <button id="btn-server-form-save" class="btn btn-primary">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Bulk Password Update
+       ================================================================ -->
+  <div id="modal-bulk-password" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-pw-title">
+    <div class="modal">
+      <div class="modal-title" id="modal-bulk-pw-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="7" width="8" height="7" rx="1"/><path d="M6 7V5a2 2 0 014 0v2"/></svg>
+        Update Password
+      </div>
+      <div class="modal-body">
+        <p id="bulk-pw-target-names" class="modal-session-id"></p>
+        <div class="form-row">
+          <label for="bulk-pw-input" class="modal-label">New Password <span class="form-required">*</span></label>
+          <input type="password" id="bulk-pw-input" class="modal-input" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div class="form-row">
+          <label for="bulk-pw-confirm" class="modal-label">Confirm Password <span class="form-required">*</span></label>
+          <input type="password" id="bulk-pw-confirm" class="modal-input" placeholder="••••••••" autocomplete="new-password" />
+        </div>
+        <div id="modal-bulk-pw-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-bulk-pw-cancel" class="btn btn-neutral">Cancel</button>
+        <button id="btn-bulk-pw-save" class="btn btn-primary">Update Password</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Bulk Import (CSV)
+       ================================================================ -->
+  <div id="modal-bulk-import" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-bulk-import-title">
+    <div class="modal modal--wide">
+      <div class="modal-title" id="modal-bulk-import-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M5 7l3 3 3-3"/><path d="M2 12h12"/></svg>
+        Bulk Import Servers
+      </div>
+      <div class="modal-body">
+        <p class="import-instructions">
+          Paste one server per line in CSV format. Header row is optional.<br/>
+          <span class="import-format-hint">name,host,username,password[,rest_port]</span>
+        </p>
+        <textarea
+          id="bulk-import-textarea"
+          class="modal-import-textarea"
+          placeholder="# Example:&#10;ixnet-server-01,10.1.1.100,admin,MyPass123,443&#10;ixnet-server-02,10.1.1.101,admin,MyPass123"
+          rows="7"
+          spellcheck="false"
+          autocomplete="off"
+        ></textarea>
+        <div id="modal-bulk-import-error" class="modal-error" style="display:none;"></div>
+        <div id="bulk-import-preview"></div>
+      </div>
+      <div class="modal-footer">
+        <button id="btn-bulk-import-back" class="btn btn-neutral">Back</button>
+        <button id="btn-bulk-import-submit" class="btn btn-primary">Import</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       MODAL: Confirm Delete Server
+       ================================================================ -->
+  <div id="modal-server-delete" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="modal-server-delete-title">
+    <div class="modal">
+      <div class="modal-title modal-title--danger" id="modal-server-delete-title">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
+        Remove Server
+      </div>
+      <div class="modal-body">
+        <p id="modal-server-delete-msg" class="modal-session-id"></p>
+        <div id="modal-server-delete-error" class="modal-error" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-neutral" id="btn-server-delete-cancel">Cancel</button>
+        <button id="btn-server-delete-confirm" class="btn btn-danger">Remove</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================================================================
+       TOAST CONTAINER
+       ================================================================ -->
+  <div id="toast-container" aria-live="polite"></div>
+
+  <!-- ================================================================
+       SCRIPTS
+       ================================================================ -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

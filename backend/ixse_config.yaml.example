@@ -1,0 +1,29 @@
+# IxNetwork Session Explorer Configuration
+# Copy to ixse_config.yaml and update with your environment details
+
+poller:
+  # How often to poll IxNetwork servers (in seconds)
+  interval_seconds: 60
+
+ixnet_servers:
+  # List of IxNetwork servers to monitor
+  - name: ixnet-server-01
+    host: 10.1.1.100
+    username: admin
+    password: ${IXNET_PASSWORD}
+    # rest_port: 443   # Uncomment for HTTPS-only servers (skips HTTP/11009 retries)
+    # rest_port: 11009 # Default classic IxNetwork port (HTTP)
+
+  # Example: second server
+  # - name: ixnet-server-02
+  #   host: 10.1.1.101
+  #   username: admin
+  #   password: ${IXNET_PASSWORD_2}
+
+# Optional: IxOS chassis for data plane detection
+# (Can be added in Phase 2 if needed)
+# ixos_chassis:
+#   - name: lab-01
+#     host: 10.1.1.1
+#     username: admin
+#     password: ${IXOS_PASSWORD}
