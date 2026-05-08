@@ -179,47 +179,67 @@ class TestMetrics:
 # ---------------------------------------------------------------------------
 
 
+def _all_session_ids(body: dict) -> set[str]:
+    """Extract all session IDs from the grouped servers response."""
+    return {
+        s["id"]
+        for srv in body["data"]["servers"]
+        for s in srv["sessions"]
+    }
+
+
 class TestListSessions:
     def test_empty_fleet(self, client: TestClient) -> None:
         resp = client.get("/sessions/")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["data"]["sessions"] == []
+        # Config has one server (ixnet-sv-01) — it appears with 0 sessions
+        servers = body["data"]["servers"]
+        assert len(servers) == 1
+        assert servers[0]["name"] == "ixnet-sv-01"
+        assert servers[0]["sessions"] == []
 
     def test_returns_all_sessions(
         self, client: TestClient, fleet: FleetState
     ) -> None:
-        fleet.upsert_session(make_session("s1", "srv-a"))
-        fleet.upsert_session(make_session("s2", "srv-b"))
+        fleet.upsert_session(make_session("s1", "ixnet-sv-01"))
+        fleet.upsert_session(make_session("s2", "ixnet-sv-01"))
 
         resp = client.get("/sessions/")
         body = resp.json()
         assert body["status"] == "ok"
-        ids = {s["id"] for s in body["data"]["sessions"]}
-        assert ids == {"s1", "s2"}
+        assert _all_session_ids(body) == {"s1", "s2"}
 
     def test_filter_by_server(
         self, client: TestClient, fleet: FleetState
     ) -> None:
-        fleet.upsert_session(make_session("s1", "srv-a"))
-        fleet.upsert_session(make_session("s2", "srv-b"))
+        fleet.upsert_session(make_session("s1", "ixnet-sv-01"))
 
-        resp = client.get("/sessions/?server=srv-a")
+        resp = client.get("/sessions/?server=ixnet-sv-01")
         body = resp.json()
-        ids = [s["id"] for s in body["data"]["sessions"]]
-        assert ids == ["s1"]
+        servers = body["data"]["servers"]
+        assert len(servers) == 1
+        assert servers[0]["name"] == "ixnet-sv-01"
+        assert servers[0]["sessions"][0]["id"] == "s1"
 
     def test_filter_by_tag(
         self, client: TestClient, fleet: FleetState
     ) -> None:
-        fleet.upsert_session(make_session("s1", tags=["bgp"]))
-        fleet.upsert_session(make_session("s2", "srv-x", tags=["ospf"]))
+        fleet.upsert_session(make_session("s1", "ixnet-sv-01", tags=["bgp"]))
+        fleet.upsert_session(make_session("s2", "ixnet-sv-01", tags=["ospf"]))
 
         resp = client.get("/sessions/?tag=bgp")
         body = resp.json()
-        ids = [s["id"] for s in body["data"]["sessions"]]
-        assert ids == ["s1"]
+        assert _all_session_ids(body) == {"s1"}
+
+    def test_response_includes_host(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        fleet.upsert_session(make_session("s1", "ixnet-sv-01"))
+        resp = client.get("/sessions/")
+        srv = resp.json()["data"]["servers"][0]
+        assert srv["host"] == "10.0.0.1"  # from make_config fixture
 
 
 # ---------------------------------------------------------------------------

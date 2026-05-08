@@ -145,42 +145,48 @@ class TestLifecycleSmoke:
 class TestSessionsCRUD:
     # --- list ---
 
-    def test_empty_fleet_returns_empty_list(self, api_client: TestClient) -> None:
+    def _all_ids(self, body: dict) -> set[str]:
+        return {s["id"] for srv in body["data"]["servers"] for s in srv["sessions"]}
+
+    def test_empty_fleet_returns_server_with_no_sessions(self, api_client: TestClient) -> None:
         resp = api_client.get("/sessions/")
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "ok"
-        assert body["data"]["sessions"] == []
+        # Config has ixnet-sv-01 — appears with 0 sessions
+        servers = body["data"]["servers"]
+        assert any(s["name"] == "ixnet-sv-01" for s in servers)
+        sv = next(s for s in servers if s["name"] == "ixnet-sv-01")
+        assert sv["sessions"] == []
 
     def test_upserted_sessions_appear_in_list(
         self, api_client: TestClient, fleet: FleetState
     ) -> None:
         fleet.upsert_session(_make_session("s1", "ixnet-sv-01"))
-        fleet.upsert_session(_make_session("s2", "ixnet-sv-02"))
+        fleet.upsert_session(_make_session("s2", "ixnet-sv-01"))
 
         resp = api_client.get("/sessions/")
-        ids = {s["id"] for s in resp.json()["data"]["sessions"]}
-        assert ids == {"s1", "s2"}
+        assert self._all_ids(resp.json()) == {"s1", "s2"}
 
     def test_filter_by_server(
         self, api_client: TestClient, fleet: FleetState
     ) -> None:
         fleet.upsert_session(_make_session("s1", "ixnet-sv-01"))
-        fleet.upsert_session(_make_session("s2", "ixnet-sv-02"))
 
         resp = api_client.get("/sessions/?server=ixnet-sv-01")
-        ids = [s["id"] for s in resp.json()["data"]["sessions"]]
-        assert ids == ["s1"]
+        body = resp.json()
+        servers = body["data"]["servers"]
+        assert len(servers) == 1
+        assert servers[0]["sessions"][0]["id"] == "s1"
 
     def test_filter_by_tag(
         self, api_client: TestClient, fleet: FleetState
     ) -> None:
-        fleet.upsert_session(_make_session("s1", tags=["bgp"]))
-        fleet.upsert_session(_make_session("s2", "ixnet-sv-02", tags=["ospf"]))
+        fleet.upsert_session(_make_session("s1", "ixnet-sv-01", tags=["bgp"]))
+        fleet.upsert_session(_make_session("s2", "ixnet-sv-01", tags=["ospf"]))
 
         resp = api_client.get("/sessions/?tag=bgp")
-        ids = [s["id"] for s in resp.json()["data"]["sessions"]]
-        assert ids == ["s1"]
+        assert self._all_ids(resp.json()) == {"s1"}
 
     # --- detail ---
 

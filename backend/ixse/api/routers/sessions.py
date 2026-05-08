@@ -63,12 +63,63 @@ async def list_sessions(
     server: Optional[str] = Query(None, description="Filter by IxNetwork server name"),
     tag: Optional[str] = Query(None, description="Filter by tag"),
 ) -> dict:
-    """Return all sessions, optionally filtered by *server* and/or *tag*."""
+    """Return all sessions grouped by server.
+
+    Response shape::
+
+        {
+            "servers": [
+                {
+                    "name": "ixnet-server-01",
+                    "host": "10.0.0.1",
+                    "sessions": [...],
+                    "session_count": 3
+                }
+            ]
+        }
+
+    Optional query params:
+    - ``?server=X`` — only include sessions from that server
+    - ``?tag=bgp``  — only include sessions carrying that tag
+    """
     fleet: FleetState = request.app.state.fleet
+    config = request.app.state.config
+
     sessions = fleet.get_sessions(server=server)
     if tag is not None:
         sessions = [s for s in sessions if tag in s.tags]
-    return _ok({"sessions": [_session_dict(s) for s in sessions]})
+
+    # Build a lookup: server name → host (from live config)
+    host_by_name = {s.name: s.host for s in config.ixnet_servers}
+
+    # Determine which servers to include:
+    # - If ?server filter is active, only that server (even if it has 0 sessions)
+    # - Otherwise, all servers in config (so empty servers still appear)
+    if server is not None:
+        server_names = [server]
+    else:
+        server_names = [s.name for s in config.ixnet_servers]
+
+    # Group sessions by ixnet_server name
+    sessions_by_server: dict[str, list[Session]] = {name: [] for name in server_names}
+    for sess in sessions:
+        if sess.ixnet_server in sessions_by_server:
+            sessions_by_server[sess.ixnet_server].append(sess)
+        else:
+            # Session from a server not in current config (stale DB row) — include anyway
+            sessions_by_server.setdefault(sess.ixnet_server, []).append(sess)
+
+    servers_payload = [
+        {
+            "name": name,
+            "host": host_by_name.get(name, name),
+            "sessions": [_session_dict(s) for s in slist],
+            "session_count": len(slist),
+        }
+        for name, slist in sessions_by_server.items()
+    ]
+
+    return _ok({"servers": servers_payload})
 
 
 @router.get("/{server}/{session_id}", summary="Get session detail")
