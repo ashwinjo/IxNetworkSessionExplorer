@@ -52,16 +52,23 @@ def detect_cp(session_obj: Any) -> bool:
     Returns:
         True if ANY device group has a protocol running, False otherwise.
     """
+    # Statuses that indicate protocols are active (RestPy 1.x DeviceGroup.Status values:
+    # configured | error | mixed | notStarted | started | starting | stopping)
+    _ACTIVE_STATUSES = {"started", "starting", "mixed", "stopping"}
+
     try:
         topologies = session_obj.Topology.find()
         for topo in topologies:
             device_groups = topo.DeviceGroup.find()
             for dg in device_groups:
-                status = dg.SessionStatus
+                # RestPy 1.x uses DeviceGroup.Status; older versions used SessionStatus
+                status = getattr(dg, "Status", None) or getattr(dg, "SessionStatus", None)  # noqa: SIM910
+                if status is None:
+                    continue
                 if isinstance(status, list):
-                    if any(s != "notStarted" for s in status):
+                    if any(s in _ACTIVE_STATUSES for s in status):
                         return True
-                elif status != "notStarted":
+                elif status in _ACTIVE_STATUSES:
                     return True
         return False
     except Exception as exc:  # noqa: BLE001

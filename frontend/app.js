@@ -88,7 +88,7 @@ async function fetchSessions() {
   showLoading();
 
   try {
-    const resp = await fetch(`${API_BASE_URL}/sessions`, {
+    const resp = await fetch(`${API_BASE_URL}/sessions/`, {
       headers: { "Accept": "application/json" },
     });
 

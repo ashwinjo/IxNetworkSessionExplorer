@@ -7,7 +7,7 @@ Coverage:
   1.  detect_cp — topology with active DG → True
   2.  detect_cp — all DGs "notStarted" → False
   3.  detect_cp — no topologies → False
-  4.  detect_cp — SessionStatus is list with one active entry → True
+  4.  detect_cp — Status is list with one active entry → True
   5.  detect_cp — RestPy exception raised → False (graceful degradation)
   6.  detect_dp — port with tx_frames > 0 → True
   7.  detect_dp — port with rx_frames > 0 → True
@@ -35,9 +35,9 @@ from ixse.plane import compute_plane_status, detect_cp, detect_dp
 
 
 def _make_dg(status: str | list[str]) -> MagicMock:
-    """Create a mock DeviceGroup with the given SessionStatus."""
-    dg = MagicMock()
-    dg.SessionStatus = status
+    """Create a mock DeviceGroup with the given Status (RestPy 1.x attribute name)."""
+    dg = MagicMock(spec=[])   # spec=[] so unknown attrs raise AttributeError
+    dg.Status = status
     return dg
 
 
