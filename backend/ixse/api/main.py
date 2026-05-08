@@ -89,8 +89,9 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Sessio
     client.connect()
     try:
         now = datetime.now(timezone.utc)
-        assistant = client._assistant  # raw RestPy handle for CP detection
-        raw_sessions = assistant.Session.find()
+        # get_raw_sessions() uses Sessions.find() — lists existing sessions only,
+        # never creates a new one.
+        raw_sessions = client.get_raw_sessions()
 
         polled: list[Session] = []
         for raw_sess in raw_sessions:
@@ -98,8 +99,7 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig) -> list[Sessio
             sess_name = str(raw_sess.Name)
 
             try:
-                ixnetwork = raw_sess.Ixnetwork
-                cp_active = detect_cp(ixnetwork)
+                cp_active = detect_cp(raw_sess.Ixnetwork)
             except Exception:  # noqa: BLE001
                 cp_active = False
 
@@ -183,20 +183,13 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     app.state.last_polled_at: datetime | None = None
     app.state.is_polling: bool = False
 
-    task = asyncio.create_task(poll_fleet(app))
     logger.info(
-        "IxNetworkSessionExplorer started. Polling every %ds across %d server(s).",
-        config.poller.interval_seconds,
+        "IxNetworkSessionExplorer started. Background poller disabled — use POST /poll/trigger to fetch manually. %d server(s) configured.",
         len(config.ixnet_servers),
     )
 
     yield
 
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
     state.close()
     logger.info("IxNetworkSessionExplorer shut down cleanly.")
 

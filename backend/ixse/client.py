@@ -1,12 +1,13 @@
 """
-RestPy abstraction: IxNetwork API client wrapper.
+RestPy abstraction: IxNetwork API client using TestPlatform.
 
-Provides Control Plane (CP) session discovery, topology queries,
-and session lifecycle management via ixnetwork-restpy.
+Uses TestPlatform + Sessions.find() to enumerate EXISTING sessions on
+a Linux API Server.  No new sessions are ever created — this is a
+read/inspect/kill-only client.
 
-Import guard: ixnetwork_restpy is optional at import time so that
-tests and non-IxNetwork environments can import this module without
-the library installed. connect() will raise ClientError if unavailable.
+Import guard: ixnetwork_restpy is optional at import time so that tests
+and non-IxNetwork environments can import this module without the library
+installed.  connect() will raise ClientError if unavailable.
 """
 
 from __future__ import annotations
@@ -18,17 +19,18 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
-# Optional import guard — allows unit tests to run without the library
+# Optional import guard
 # ---------------------------------------------------------------------------
 
 try:
-    from ixnetwork_restpy import SessionAssistant  # type: ignore[import-untyped]
+    from ixnetwork_restpy.testplatform.testplatform import TestPlatform  # type: ignore[import-untyped]
 
     _RESTPY_AVAILABLE = True
 except ImportError:
     _RESTPY_AVAILABLE = False
-    SessionAssistant = None  # type: ignore[assignment,misc]
+    TestPlatform = None  # type: ignore[assignment,misc]
 
 
 # ---------------------------------------------------------------------------
@@ -37,18 +39,11 @@ except ImportError:
 
 
 class ClientError(Exception):
-    """Raised for all RestPy client failures.
-
-    Distinguishes:
-    - Auth failures (no retry)
-    - Transport/timeout failures (retried once)
-    - State errors (session not found, kill verification failed)
-    - Dependency errors (restpy not installed)
-    """
+    """Raised for all RestPy client failures."""
 
 
 # ---------------------------------------------------------------------------
-# Transport-layer DTOs (not in models.py — these are RestPy-specific)
+# Transport-layer DTOs
 # ---------------------------------------------------------------------------
 
 
@@ -57,7 +52,7 @@ class SessionSummary(BaseModel):
 
     id: str
     name: str
-    state: str  # e.g. "Active", "InActive"
+    state: str  # e.g. "Active", "stopped"
 
 
 class SessionDetail(BaseModel):
@@ -73,53 +68,34 @@ class SessionDetail(BaseModel):
 # Internal retry helper
 # ---------------------------------------------------------------------------
 
-_MAX_RETRIES = 1  # one retry → two total attempts
+_MAX_RETRIES = 1
 
 
 def _with_retry(fn: Any, host: str) -> Any:
     """Execute *fn* with one retry on transient errors.
 
-    Auth errors (PermissionError, ValueError containing "auth") are re-raised
-    immediately without retry.
-
-    Args:
-        fn: Zero-argument callable to execute.
-        host: IxNetwork server hostname (for error context in ClientError).
-
-    Returns:
-        Whatever *fn* returns on success.
-
-    Raises:
-        ClientError: After two consecutive failures, wrapping the last exception.
+    Auth errors (PermissionError, ValueError) are re-raised immediately.
     """
     last_exc: Exception | None = None
     for attempt in range(_MAX_RETRIES + 1):
         try:
             return fn()
         except (PermissionError, ValueError) as exc:
-            # Auth / bad-argument errors — no point retrying
             raise ClientError(f"Non-retryable error from {host}: {exc}") from exc
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
             if attempt < _MAX_RETRIES:
                 logger.warning(
                     "Transient error from %s (attempt %d/%d): %s — retrying",
-                    host,
-                    attempt + 1,
-                    _MAX_RETRIES + 1,
-                    exc,
+                    host, attempt + 1, _MAX_RETRIES + 1, exc,
                 )
             else:
                 logger.error(
                     "Permanent error from %s after %d attempts: %s",
-                    host,
-                    _MAX_RETRIES + 1,
-                    exc,
+                    host, _MAX_RETRIES + 1, exc,
                 )
-
     raise ClientError(
-        f"Failed to communicate with IxNetwork server {host} after "
-        f"{_MAX_RETRIES + 1} attempts: {last_exc}"
+        f"Failed to communicate with {host} after {_MAX_RETRIES + 1} attempts: {last_exc}"
     ) from last_exc
 
 
@@ -129,63 +105,62 @@ def _with_retry(fn: Any, host: str) -> Any:
 
 
 class RestPyClient:
-    """IxNetwork RestPy client. Provides CP session discovery.
+    """IxNetwork client using TestPlatform for read-only session enumeration.
 
-    Lifecycle:
-        client = RestPyClient(host, username, password)
+    Connects to an existing Linux API Server and lists all sessions that are
+    already running — never creates a new session.
+
+    Lifecycle::
+
+        client = RestPyClient(host, username, password, rest_port=443)
         client.connect()
         sessions = client.list_sessions()
-        ...
+        raw = client.get_raw_sessions()   # for CP detection
         client.disconnect()
-
-    connect() must be called before any query method. Not thread-safe on its
-    own — the caller (background poller) is responsible for synchronisation.
     """
 
-    def __init__(self, host: str, username: str, password: str, rest_port: int | None = None) -> None:
-        """Store connection parameters. Does not connect (lazy connect pattern).
-
-        Args:
-            host: IxNetwork server IP or hostname.
-            username: Authentication username.
-            password: Authentication password.
-            rest_port: REST API port. None lets RestPy auto-detect (tries 11009
-                       then 443). Use 443 for HTTPS-only servers.
-        """
+    def __init__(
+        self,
+        host: str,
+        username: str,
+        password: str,
+        rest_port: int | None = None,
+    ) -> None:
         self.host = host
         self.username = username
         self.password = password
         self.rest_port = rest_port
-        self._assistant: Any | None = None  # set by connect()
+        self._platform: Any | None = None
 
     # ------------------------------------------------------------------
     # Connection lifecycle
     # ------------------------------------------------------------------
 
     def connect(self) -> None:
-        """Connect to the IxNetwork server.
+        """Authenticate with the IxNetwork Linux API Server.
+
+        Uses TestPlatform.Authenticate() — no session is created.
 
         Raises:
-            ClientError: If ixnetwork_restpy is not installed, or if the
-                         connection attempt fails.
+            ClientError: If ixnetwork_restpy is not installed, or if
+                         authentication fails.
         """
         if not _RESTPY_AVAILABLE:
             raise ClientError(
                 "ixnetwork_restpy is not installed. "
                 "Install with: pip install ixnetwork-restpy"
             )
-
         try:
-            kwargs: dict[str, Any] = dict(
-                IpAddress=self.host,
-                UserName=self.username,
-                Password=self.password,
-                LogLevel="warning",
-            )
+            kwargs: dict[str, Any] = {
+                "ip_address": self.host,
+                "verify_cert": False,
+            }
             if self.rest_port is not None:
-                kwargs["RestPort"] = self.rest_port
+                kwargs["rest_port"] = self.rest_port
 
-            self._assistant = SessionAssistant(**kwargs)
+            platform = TestPlatform(**kwargs)
+            platform.Authenticate(self.username, self.password)
+            self._platform = platform
             logger.info("Connected to IxNetwork server %s", self.host)
         except Exception as exc:
             raise ClientError(
@@ -193,93 +168,90 @@ class RestPyClient:
             ) from exc
 
     def disconnect(self) -> None:
-        """Disconnect cleanly. Safe to call even if not connected (idempotent)."""
-        if self._assistant is None:
-            return
-        try:
-            # SessionAssistant does not expose an explicit disconnect; releasing
-            # the reference is sufficient for non-persistent sessions.
-            self._assistant = None
+        """Release the TestPlatform handle. Safe to call when not connected."""
+        if self._platform is not None:
+            self._platform = None
             logger.info("Disconnected from IxNetwork server %s", self.host)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Error during disconnect from %s: %s", self.host, exc)
-            self._assistant = None
-
-    # ------------------------------------------------------------------
-    # Guards
-    # ------------------------------------------------------------------
 
     def _require_connected(self) -> Any:
-        """Return the SessionAssistant or raise ClientError if not connected."""
-        if self._assistant is None:
+        if self._platform is None:
             raise ClientError(
                 f"RestPyClient for {self.host} is not connected. "
                 "Call connect() first."
             )
-        return self._assistant
+        return self._platform
 
     # ------------------------------------------------------------------
     # Session queries
     # ------------------------------------------------------------------
 
     def list_sessions(self) -> list[SessionSummary]:
-        """List all sessions on this IxNetwork server.
+        """List all existing sessions on this IxNetwork server.
+
+        Does NOT create any new sessions.
 
         Returns:
-            List of SessionSummary DTOs (one per session).
-
-        Raises:
-            ClientError: On connection failure after retry, or if not connected.
+            List of SessionSummary DTOs (one per existing session).
         """
-        assistant = self._require_connected()
+        platform = self._require_connected()
 
         def _fetch() -> list[SessionSummary]:
-            raw_sessions = assistant.Session.find()
+            raw = platform.Sessions.find()
             return [
                 SessionSummary(
                     id=str(s.Id),
                     name=str(s.Name),
-                    state=str(s.State),
+                    state=str(getattr(s, "State", "unknown")),
                 )
-                for s in raw_sessions
+                for s in raw
             ]
 
         return _with_retry(_fetch, self.host)
 
+    def get_raw_sessions(self) -> list[Any]:
+        """Return raw RestPy Session objects for CP detection and port mapping.
+
+        Each object exposes:
+          - ``.Id``        — session ID string
+          - ``.Name``      — session name
+          - ``.State``     — session state
+          - ``.Ixnetwork`` — IxNetwork handle (has ``.Topology``, ``.Vport``)
+
+        Does NOT create any new sessions.
+        """
+        platform = self._require_connected()
+
+        def _fetch() -> list[Any]:
+            return list(platform.Sessions.find())
+
+        return _with_retry(_fetch, self.host)
+
     def get_session(self, session_id: str) -> SessionDetail:
-        """Get full session detail for a specific session.
-
-        Args:
-            session_id: The session ID (as a string) to look up.
-
-        Returns:
-            SessionDetail DTO with port and topology data.
+        """Get full session detail for a specific existing session.
 
         Raises:
             ClientError: If session not found, or on transport failure.
         """
-        assistant = self._require_connected()
+        platform = self._require_connected()
 
         def _fetch() -> SessionDetail:
-            raw_sessions = assistant.Session.find()
+            raw_sessions = platform.Sessions.find()
             matched = [s for s in raw_sessions if str(s.Id) == session_id]
             if not matched:
                 raise ClientError(
                     f"Session {session_id!r} not found on server {self.host}"
                 )
             sess = matched[0]
-
-            topologies = sess.Ixnetwork.Topology.find()
-            vports = sess.Ixnetwork.Vport.find()
-
+            ixnetwork = sess.Ixnetwork
+            topologies = ixnetwork.Topology.find()
+            vports = ixnetwork.Vport.find()
             ports = [
                 {
                     "name": str(vp.Name),
-                    "assigned_to": str(vp.AssignedTo),
+                    "assigned_to": str(getattr(vp, "AssignedTo", "")),
                 }
                 for vp in vports
             ]
-
             return SessionDetail(
                 id=str(sess.Id),
                 name=str(sess.Name),
@@ -287,26 +259,21 @@ class RestPyClient:
                 topology_count=len(topologies),
             )
 
-        # ClientError (not found) should propagate immediately, not be retried
         try:
             return _with_retry(_fetch, self.host)
         except ClientError:
             raise
 
     def kill_session(self, session_id: str) -> None:
-        """Remove a session from IxNetwork and verify it is gone.
-
-        Args:
-            session_id: The session ID to kill.
+        """Remove an existing session and verify it is gone.
 
         Raises:
-            ClientError: If session not found, remove call fails, or the
-                         session is still present after remove (kill failed).
+            ClientError: If session not found, remove fails, or session
+                         is still present after removal.
         """
-        assistant = self._require_connected()
+        platform = self._require_connected()
 
-        # Locate session
-        raw_sessions = assistant.Session.find()
+        raw_sessions = platform.Sessions.find()
         matched = [s for s in raw_sessions if str(s.Id) == session_id]
         if not matched:
             raise ClientError(
@@ -314,21 +281,17 @@ class RestPyClient:
                 "cannot kill a session that does not exist"
             )
 
-        sess = matched[0]
         try:
-            sess.remove()
+            matched[0].remove()
         except Exception as exc:
             raise ClientError(
                 f"Failed to remove session {session_id!r} from {self.host}: {exc}"
             ) from exc
 
-        # Verify the session is gone
-        remaining = assistant.Session.find()
-        still_present = [s for s in remaining if str(s.Id) == session_id]
-        if still_present:
+        remaining = platform.Sessions.find()
+        if any(str(s.Id) == session_id for s in remaining):
             raise ClientError(
-                f"Session {session_id!r} on {self.host} is still present after "
-                "kill — remove may have failed silently"
+                f"Session {session_id!r} on {self.host} still present after kill"
             )
 
         logger.info("Session %r killed on %s", session_id, self.host)
