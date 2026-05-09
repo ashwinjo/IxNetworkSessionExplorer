@@ -3,26 +3,26 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Copy vendored wheels first (may be an empty directory — that is fine).
-# When vendor/ contains all required wheels, pip uses them directly and
-# never opens a network connection.  When vendor/ is empty the build
-# falls back to PyPI as normal.
-COPY vendor/ /vendor/
-
 # Copy dependency manifests
 COPY pyproject.toml requirements.txt ./
 
+# Create /vendor unconditionally so the subsequent COPY never fails even
+# when the host-side vendor/ directory is absent or empty.
+# `make build` also runs `mkdir -p backend/vendor` for the same reason.
+RUN mkdir -p /vendor
+COPY vendor/ /vendor/
+
 # Install runtime deps into an isolated prefix so they copy cleanly.
-# --find-links /vendor  → prefer local wheels over PyPI
-# --no-index            → only used when vendor/ is populated (see Makefile)
-#
-# We use a shell form so we can test whether wheels exist and choose the
-# right pip flags at build time.
+# If vendor/ contains wheels (populated by `make vendor`), pip uses them
+# directly and never opens a network connection.  Otherwise it falls back
+# to PyPI as normal.
 RUN if [ "$(ls /vendor/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then \
+        echo "==> Prefer vendor wheels, fall back to PyPI for unmatched platforms" && \
         pip install --no-cache-dir --prefix=/install \
-            --find-links /vendor --no-index \
+            --find-links /vendor \
             -r requirements.txt; \
     else \
+        echo "==> Online install from PyPI" && \
         pip install --no-cache-dir --prefix=/install \
             -r requirements.txt; \
     fi
