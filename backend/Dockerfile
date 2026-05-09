@@ -3,11 +3,29 @@ FROM python:3.11-slim AS builder
 
 WORKDIR /build
 
-# Install build tools + copy dependency manifests
+# Copy vendored wheels first (may be an empty directory — that is fine).
+# When vendor/ contains all required wheels, pip uses them directly and
+# never opens a network connection.  When vendor/ is empty the build
+# falls back to PyPI as normal.
+COPY vendor/ /vendor/
+
+# Copy dependency manifests
 COPY pyproject.toml requirements.txt ./
 
-# Install runtime deps into an isolated prefix so they copy cleanly
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+# Install runtime deps into an isolated prefix so they copy cleanly.
+# --find-links /vendor  → prefer local wheels over PyPI
+# --no-index            → only used when vendor/ is populated (see Makefile)
+#
+# We use a shell form so we can test whether wheels exist and choose the
+# right pip flags at build time.
+RUN if [ "$(ls /vendor/*.whl 2>/dev/null | wc -l)" -gt 0 ]; then \
+        pip install --no-cache-dir --prefix=/install \
+            --find-links /vendor --no-index \
+            -r requirements.txt; \
+    else \
+        pip install --no-cache-dir --prefix=/install \
+            -r requirements.txt; \
+    fi
 
 # Copy source and build the wheel
 COPY ixse/ ./ixse/
