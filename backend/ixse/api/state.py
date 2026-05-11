@@ -53,6 +53,11 @@ class StateError(Exception):
 # ---------------------------------------------------------------------------
 
 _DDL = """
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS servers (
     name        TEXT    PRIMARY KEY,
     host        TEXT    NOT NULL,
@@ -76,6 +81,10 @@ CREATE TABLE IF NOT EXISTS sessions (
     tags            TEXT    NOT NULL DEFAULT '[]',
     last_polled_at  TEXT    NOT NULL,
     created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+    session_state   TEXT    NOT NULL DEFAULT '',
+    error_status    TEXT    NOT NULL DEFAULT 'NOERROR',
+    error_count     INTEGER NOT NULL DEFAULT 0,
+    error_list      TEXT    NOT NULL DEFAULT '[]',
     PRIMARY KEY (id, ixnet_server)
 );
 CREATE INDEX IF NOT EXISTS idx_server      ON sessions(ixnet_server);
@@ -118,14 +127,19 @@ def _row_to_session(row: sqlite3.Row) -> Session:
     # cp_active / dp_active / utilized are derived by the Session model_validator
     # from the per-port data stored in the ports JSON — no need to read the
     # denormalised session-level columns here.
+    keys = row.keys()
     return Session(
         id=row["id"],
         ixnet_server=row["ixnet_server"],
         name=row["name"],
-        username=row["username"] if "username" in row.keys() else "",
+        username=row["username"] if "username" in keys else "",
         ports=_json_to_ports(row["ports"]),
         tags=_json_to_tags(row["tags"]),
         last_polled=_str_to_dt(row["last_polled_at"]),
+        session_state=row["session_state"] if "session_state" in keys else "",
+        error_status=row["error_status"] if "error_status" in keys else "NOERROR",
+        error_count=int(row["error_count"]) if "error_count" in keys else 0,
+        error_list=json.loads(row["error_list"]) if "error_list" in keys else [],
     )
 
 
@@ -166,18 +180,34 @@ class FleetState:
     # ------------------------------------------------------------------
 
     def _migrate(self) -> None:
-        """Apply additive schema migrations for existing databases."""
-        try:
-            self._conn.execute("ALTER TABLE servers ADD COLUMN tags TEXT NOT NULL DEFAULT '[]'")
-            self._conn.commit()
-        except sqlite3.OperationalError:
-            pass  # column already exists — nothing to do
+        """Apply additive schema migrations for existing databases.
+
+        Each ALTER TABLE is attempted individually so that a partially-migrated
+        database (e.g. after an interrupted upgrade) still ends up fully
+        migrated.  OperationalError means the column already exists — safe
+        to ignore.
+        """
+        migrations = [
+            "ALTER TABLE servers   ADD COLUMN tags          TEXT    NOT NULL DEFAULT '[]'",
+            "ALTER TABLE sessions  ADD COLUMN username      TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE sessions  ADD COLUMN session_state TEXT    NOT NULL DEFAULT ''",
+            "ALTER TABLE sessions  ADD COLUMN error_status  TEXT    NOT NULL DEFAULT 'NOERROR'",
+            "ALTER TABLE sessions  ADD COLUMN error_count   INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE sessions  ADD COLUMN error_list    TEXT    NOT NULL DEFAULT '[]'",
+        ]
+        for sql in migrations:
+            try:
+                self._conn.execute(sql)
+                self._conn.commit()
+            except sqlite3.OperationalError:
+                pass  # column already exists — nothing to do
 
     def _warm_cache(self) -> None:
         """Populate the in-memory cache from all existing DB rows."""
         cursor = self._conn.execute(
-            "SELECT id, ixnet_server, name, ports, cp_active, dp_active, "
-            "utilized, tags, last_polled_at FROM sessions"
+            "SELECT id, ixnet_server, name, username, ports, cp_active, dp_active, "
+            "utilized, tags, last_polled_at, session_state, error_status, "
+            "error_count, error_list FROM sessions"
         )
         for row in cursor.fetchall():
             session = _row_to_session(row)
@@ -189,8 +219,9 @@ class FleetState:
             """
             INSERT OR REPLACE INTO sessions
                 (id, ixnet_server, name, username, ports,
-                 cp_active, dp_active, utilized, tags, last_polled_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cp_active, dp_active, utilized, tags, last_polled_at,
+                 session_state, error_status, error_count, error_list)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 session.id,
@@ -203,6 +234,10 @@ class FleetState:
                 int(session.utilized),
                 _tags_to_json(session.tags),
                 _dt_to_str(session.last_polled),
+                session.session_state,
+                session.error_status,
+                session.error_count,
+                json.dumps(session.error_list),
             ),
         )
         self._conn.commit()
@@ -547,6 +582,27 @@ class FleetState:
             )
             self._conn.commit()
             return server.model_copy(update={"tags": new_tags})
+
+    # ------------------------------------------------------------------
+    # App settings (key-value store)
+    # ------------------------------------------------------------------
+
+    def get_setting(self, key: str, default: str = "") -> str:
+        """Return the stored value for *key*, or *default* if not set."""
+        row = self._conn.execute(
+            "SELECT value FROM settings WHERE key = ?", (key,)
+        ).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        """Persist *value* for *key*. Thread-safe."""
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+            self._conn.commit()
 
     def close(self) -> None:
         """Close the SQLite connection. Call on application shutdown."""

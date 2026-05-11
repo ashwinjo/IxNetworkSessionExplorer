@@ -8,15 +8,13 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # Mount your config file (required):
-      - ./backend/ixse_config.yaml:/app/ixse_config.yaml:ro
-      # Persist the SQLite database across restarts (optional):
+      # Persist the SQLite database (servers + sessions + poll config) across restarts:
       - ixse_db:/app/data
     environment:
-      # Credentials via env vars — set before running docker compose up
-      # e.g.: export IXNET_PASSWORD=secret
-      - IXNET_PASSWORD=${IXNET_PASSWORD:-}
-      - IXOS_PASSWORD=${IXOS_PASSWORD:-}
+      # Optional: override the default 60-second poll interval at startup.
+      # Can also be changed at runtime via PATCH /poll/config in the UI.
+      - IXSE_POLL_INTERVAL=${IXSE_POLL_INTERVAL:-60}
+      - IXSE_DB=/app/data/ixse.db
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c",

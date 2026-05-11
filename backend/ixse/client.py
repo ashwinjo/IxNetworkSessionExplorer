@@ -129,6 +129,53 @@ def _parse_location_str(raw: str) -> tuple[str, int, int] | None:
     return None
 
 
+def fetch_session_errors(session_obj: Any) -> tuple[str, int, list[str]]:
+    """Fetch AppErrors for an IxNetwork session and return a summary triple.
+
+    Mirrors the sample query::
+
+        globals = session.Ixnetwork.Globals.find()
+        app_errors = globals.AppErrors.find()
+        error_list = app_errors.Error.find(ErrorLevel='kError')
+
+    Args:
+        session_obj: Raw RestPy Session object (duck-typed; accepts mock).
+
+    Returns:
+        Tuple of (error_status, error_count, error_list) where:
+        - error_status: "ERROR" when any kError-level errors are present,
+                        "NOERROR" otherwise.
+        - error_count:  AppErrors.ErrorCount as reported by IxNetwork (total
+                        across all levels, not just kError).
+        - error_list:   List of Error.Name strings at the kError level only.
+
+    Conservative failure mode: any RestPy exception returns ("NOERROR", 0, [])
+    so a single unreachable Globals object cannot mark the session as errored.
+    """
+    try:
+        globals_obj = session_obj.Ixnetwork.Globals.find()
+        app_errors = globals_obj.AppErrors.find()
+        error_objs = app_errors.Error.find(ErrorLevel="kError")
+        error_names: list[str] = [str(getattr(e, "Name", "") or "") for e in error_objs]
+
+        # ErrorCount is the total count across *all* severity levels from the API.
+        raw_count = getattr(app_errors, "ErrorCount", None)
+        try:
+            total_count = int(raw_count) if raw_count is not None else len(error_names)
+        except (TypeError, ValueError):
+            total_count = len(error_names)
+
+        status = "ERROR" if error_names else "NOERROR"
+        logger.debug(
+            "AppErrors: status=%s, count=%d, kError names=%s",
+            status, total_count, error_names,
+        )
+        return status, total_count, error_names
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to fetch AppErrors from session: %s", exc)
+        return "NOERROR", 0, []
+
+
 def fetch_lldp_map(ixnetwork_obj: Any) -> dict[tuple[str, int, int], LldpPeerInfo]:
     """Query IxNetwork Locations API and return per-port LLDP neighbor info.
 

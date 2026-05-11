@@ -5,8 +5,9 @@ Exposes endpoints for session management, chassis monitoring, and health checks.
 Runs a background task that polls all IxNetwork servers every poll_interval_seconds.
 Integrates metrics export for Prometheus.
 
-Config is loaded from the path in the IXSE_CONFIG environment variable
-(default: "ixse_config.yaml").
+No config file required — servers are managed via POST /servers.
+Poll interval defaults to IXSE_POLL_INTERVAL env var (default 60 s) and
+can be changed at runtime via PATCH /poll/config (persisted to SQLite).
 """
 
 from __future__ import annotations
@@ -19,8 +20,9 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -36,10 +38,10 @@ from ixse.api.routers import health as health_router
 from ixse.api.routers import servers as servers_router
 from ixse.api.routers import sessions as sessions_router
 from ixse.api.state import FleetState
-from ixse.client import RestPyClient, fetch_lldp_map
-from ixse.config import AppConfig, ConfigError, IxNetServerConfig, load_config
+from ixse.client import RestPyClient, fetch_lldp_map, fetch_session_errors
+from ixse.config import IxNetServerConfig
 from ixse.ixn_web import check_ixnetwork_web
-from ixse.models import LldpPeerInfo, PollStatus, ServerEntry, Session, SessionPort
+from ixse.models import LldpPeerInfo, PollConfig, PollStatus, ServerEntry, Session, SessionPort
 from ixse.plane import detect_cp_per_vport
 
 logger = logging.getLogger(__name__)
@@ -171,8 +173,8 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) 
         for raw_sess in raw_sessions:
             sess_id = str(raw_sess.Id)
             sess_name = str(raw_sess.Name)
-
             sess_username = str(getattr(raw_sess, "UserName", "") or "")
+            sess_state = str(getattr(raw_sess, "State", "") or "")
 
             # Fetch topologies once; used for per-port CP detection
             try:
@@ -192,6 +194,13 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) 
             except Exception:  # noqa: BLE001
                 ports = []
 
+            # Fetch AppErrors — error_status is "ERROR" / "NOERROR",
+            # error_count is total count, error_list has kError-level names.
+            try:
+                error_status, error_count, error_list = fetch_session_errors(raw_sess)
+            except Exception:  # noqa: BLE001
+                error_status, error_count, error_list = "NOERROR", 0, []
+
             # Preserve user-set tags across poll cycles.
             # Tags are written by PATCH /sessions/{server}/{id}/tags and must
             # not be clobbered when the poller refreshes port/plane data.
@@ -208,6 +217,10 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) 
                 ports=ports,
                 tags=preserved_tags,
                 last_polled=now,
+                session_state=sess_state,
+                error_status=error_status,
+                error_count=error_count,
+                error_list=error_list,
             )
             state.upsert_session(session)
             polled.append(session)
@@ -257,17 +270,24 @@ async def _run_poll_cycle(app: FastAPI) -> None:
                     update_session_metrics(
                         s.id, server_cfg.name, s.utilized, s.cp_active, s.dp_active
                     )
+                # Clear any previous connection error on success
+                app.state.poll_errors.pop(server_cfg.name, None)
             except Exception as exc:  # noqa: BLE001
                 logger.error("Poller error for server '%s': %s", server_cfg.name, exc)
+                app.state.poll_errors[server_cfg.name] = str(exc)
     finally:
         app.state.last_polled_at = datetime.now(timezone.utc)
         app.state.is_polling = False
 
 
 async def poll_fleet(app: FastAPI) -> None:
-    """Background task: poll all servers every ``interval_seconds``."""
+    """Background task: poll all servers every ``interval_seconds``.
+
+    Reads interval from app.state each loop iteration so UI changes
+    take effect on the very next sleep without a restart.
+    """
     while True:
-        await asyncio.sleep(app.state.config.poller.interval_seconds)
+        await asyncio.sleep(app.state.poll_interval_seconds)
         await _run_poll_cycle(app)
 
 
@@ -276,48 +296,54 @@ async def poll_fleet(app: FastAPI) -> None:
 # ---------------------------------------------------------------------------
 
 
+_DEFAULT_POLL_INTERVAL = 60  # seconds
+
+
+class _PollConfigUpdate(BaseModel):
+    interval_seconds: int
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore[type-arg]
-    """Load config, initialise state, start poller on startup; tear down on shutdown."""
-    config_path = os.environ.get("IXSE_CONFIG", "ixse_config.yaml")
-    try:
-        config: AppConfig = load_config(config_path)
-    except ConfigError as exc:
-        logger.error("Failed to load config from '%s': %s", config_path, exc)
-        raise
+    """Initialise state, start background poller on startup; tear down on shutdown.
 
+    No config file required — all servers are managed via the UI (POST /servers).
+    Poller interval defaults to IXSE_POLL_INTERVAL env var (default 60 s) and
+    can be changed at runtime via PATCH /poll/config.
+    """
     db_path = os.environ.get("IXSE_DB", "ixse.db")
     state = FleetState(db_path=db_path)
 
-    # Seed servers from YAML into DB (INSERT OR IGNORE — never overwrites UI-added entries).
-    yaml_servers = [
-        ServerEntry(
-            name=s.name,
-            host=s.host,
-            username=s.username,
-            password=s.password,
-            rest_port=s.rest_port,
-        )
-        for s in config.ixnet_servers
-    ]
-    state.seed_servers(yaml_servers)
+    # Resolve poll interval: DB wins (persisted from previous UI change),
+    # then env var, then hard-coded default.
+    env_interval = int(os.environ.get("IXSE_POLL_INTERVAL", str(_DEFAULT_POLL_INTERVAL)))
+    stored = state.get_setting("poll_interval_seconds")
+    interval_seconds = int(stored) if stored else env_interval
 
-    app.state.config = config
     app.state.fleet = state
+    app.state.poll_interval_seconds: int = interval_seconds
     app.state.last_polled_at: datetime | None = None
     app.state.is_polling: bool = False
     app.state.ixnetwork_web_status = {}
+    app.state.poll_errors: dict[str, str] = {}  # server_name -> last error message
 
     db_server_count = len(state.list_servers())
     logger.info(
-        "IxNetworkSessionExplorer started. %d server(s) in DB (seeded %d from YAML). "
-        "Use POST /poll/trigger to fetch sessions.",
+        "IxNetworkSessionExplorer started. %d server(s) in DB. "
+        "Poll interval: %ds. Use POST /poll/trigger to fetch sessions immediately.",
         db_server_count,
-        len(yaml_servers),
+        interval_seconds,
     )
+
+    poller_task = asyncio.create_task(poll_fleet(app))
 
     yield
 
+    poller_task.cancel()
+    try:
+        await poller_task
+    except asyncio.CancelledError:
+        pass
     state.close()
     logger.info("IxNetworkSessionExplorer shut down cleanly.")
 
@@ -370,13 +396,44 @@ def create_app() -> FastAPI:
     )
     async def poll_status(request: Request) -> PollStatus:
         last = request.app.state.last_polled_at
-        interval = request.app.state.config.poller.interval_seconds
+        interval = request.app.state.poll_interval_seconds
         next_scheduled = (last + timedelta(seconds=interval)) if last else None
         return PollStatus(
             last_polled_at=last,
             next_scheduled=next_scheduled,
             is_polling=request.app.state.is_polling,
         )
+
+    @application.get(
+        "/poll/config",
+        summary="Get poller interval configuration",
+        tags=["poll"],
+    )
+    async def get_poll_config(request: Request) -> dict:
+        return {
+            "status": "ok",
+            "data": {"interval_seconds": request.app.state.poll_interval_seconds},
+        }
+
+    @application.patch(
+        "/poll/config",
+        summary="Update poller interval",
+        tags=["poll"],
+    )
+    async def update_poll_config(body: _PollConfigUpdate, request: Request) -> dict:
+        if body.interval_seconds < 10 or body.interval_seconds > 3600:
+            raise HTTPException(
+                status_code=422,
+                detail="interval_seconds must be between 10 and 3600",
+            )
+        request.app.state.poll_interval_seconds = body.interval_seconds
+        request.app.state.fleet.set_setting(
+            "poll_interval_seconds", str(body.interval_seconds)
+        )
+        return {
+            "status": "ok",
+            "data": {"interval_seconds": body.interval_seconds},
+        }
 
     # ------------------------------------------------------------------
     # Prometheus metrics endpoint

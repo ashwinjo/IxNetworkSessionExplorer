@@ -420,6 +420,135 @@ header::before {
   background: var(--crimson-dim);
 }
 
+/* Error-status indicator pill — green = no errors, red = errors present */
+.btn-error-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  font-size: 0.68rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  border: 1px solid;
+  border-radius: var(--radius);
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    background var(--ease),
+    border-color var(--ease),
+    box-shadow var(--ease);
+}
+
+.btn-error-status.noerror {
+  background: var(--green-dim);
+  border-color: rgba(0, 230, 118, 0.30);
+  color: var(--green);
+}
+
+.btn-error-status.error {
+  background: var(--crimson-dim);
+  border-color: rgba(255, 51, 85, 0.40);
+  color: var(--crimson);
+  cursor: pointer;
+  animation: error-pulse 2.2s ease infinite;
+}
+
+.btn-error-status.error:hover {
+  background: rgba(255, 51, 85, 0.18);
+  border-color: var(--crimson);
+  box-shadow: 0 0 10px rgba(255, 51, 85, 0.25);
+}
+
+@keyframes error-pulse {
+  0%   { box-shadow: 0 0 0 0   rgba(255, 51, 85, 0.45); }
+  55%  { box-shadow: 0 0 0 5px rgba(255, 51, 85, 0);    }
+  100% { box-shadow: 0 0 0 0   rgba(255, 51, 85, 0);    }
+}
+
+/* Session state label — shown below the session name */
+.session-state-badge {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.63rem;
+  font-family: var(--font-mono);
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  font-weight: 500;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-med);
+  color: var(--text-dim);
+  background: transparent;
+}
+
+.session-state-badge.state-active {
+  color: var(--green);
+  border-color: rgba(0, 230, 118, 0.30);
+  background: rgba(0, 230, 118, 0.06);
+}
+
+.session-state-badge.state-stopped {
+  color: var(--text-dim);
+  border-color: var(--border);
+}
+
+.session-state-badge.state-initial {
+  color: var(--amber);
+  border-color: rgba(255, 171, 0, 0.30);
+  background: rgba(255, 171, 0, 0.06);
+}
+
+/* Error details modal — list of error strings */
+.error-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.error-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  background: rgba(255, 51, 85, 0.04);
+  border: 1px solid rgba(255, 51, 85, 0.15);
+  border-left: 3px solid var(--crimson);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  line-height: 1.5;
+}
+
+.error-list-empty {
+  font-size: 0.78rem;
+  font-family: var(--font-mono);
+  color: var(--green);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.error-count-badge {
+  display: inline-block;
+  background: var(--crimson-dim);
+  border: 1px solid rgba(255, 51, 85, 0.35);
+  border-radius: 10px;
+  color: var(--crimson);
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  font-weight: 600;
+  padding: 1px 8px;
+  letter-spacing: 0.06em;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
 /* Label */
 .label {
   font-size: 0.72rem;
@@ -674,6 +803,22 @@ header::before {
   color: #ffab40;
   border-color: rgba(255, 171, 64, 0.45);
   background: rgba(255, 171, 64, 0.08);
+}
+
+/* Poll Connection Failed — RestPy connect() raised an exception */
+.server-poll-error {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 3px;
+  color: #ff4060;
+  border: 1px solid rgba(255, 40, 80, 0.45);
+  background: rgba(255, 40, 80, 0.10);
+  cursor: help;
 }
 
 /* ----- Session Table ------------------------------------------------- */

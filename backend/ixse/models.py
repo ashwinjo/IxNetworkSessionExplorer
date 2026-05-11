@@ -14,6 +14,9 @@ from typing import Literal
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, model_validator
 
+# Possible values from IxNetwork AppErrors.Error.ErrorLevel
+_ERROR_LEVEL_KERROR = "kError"
+
 
 class LldpPeerInfo(BaseModel):
     """LLDP neighbor information learned on a physical port via IxNetwork Locations API."""
@@ -136,6 +139,27 @@ class Session(BaseModel):
         ..., description="UTC timestamp of the last successful poll"
     )
 
+    # ── Session state & error fields (populated from IxNetwork Globals.AppErrors) ──
+    session_state: str = Field(
+        default="",
+        description=(
+            "Raw IxNetwork session state string "
+            "(e.g. 'Active', 'stopped', 'Initial')"
+        ),
+    )
+    error_status: Literal["NOERROR", "ERROR"] = Field(
+        default="NOERROR",
+        description="ERROR when any kError-level AppErrors are present, NOERROR otherwise",
+    )
+    error_count: int = Field(
+        default=0,
+        description="Total AppErrors.ErrorCount reported by IxNetwork",
+    )
+    error_list: list[str] = Field(
+        default_factory=list,
+        description="Names of all kError-level AppErrors on this session",
+    )
+
     @model_validator(mode="after")
     def derive_plane_from_ports(self) -> "Session":
         """Derive session-level plane status from the union of all port statuses.
@@ -203,6 +227,17 @@ class ServerEntryPublic(BaseModel):
     username: str
     rest_port: int | None = None
     tags: list[str] = Field(default_factory=list)
+
+
+class PollConfig(BaseModel):
+    """Poller configuration — interval persisted in the DB."""
+
+    interval_seconds: int = Field(
+        default=60,
+        ge=10,
+        le=3600,
+        description="Poll interval in seconds (10–3600)",
+    )
 
 
 class ChassisHealth(BaseModel):

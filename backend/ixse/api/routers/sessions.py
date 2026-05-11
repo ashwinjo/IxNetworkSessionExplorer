@@ -120,28 +120,18 @@ async def list_sessions(
     - ``?tag=bgp``  — only include sessions carrying that tag
     """
     fleet: FleetState = request.app.state.fleet
-    config = request.app.state.config
 
     sessions = fleet.get_sessions(server=server)
     if tag is not None:
         sessions = [s for s in sessions if tag in s.tags]
 
-    # Host labels: start from YAML config, overlay DB (UI-added / updated servers win).
-    host_by_name: dict[str, str] = {s.name: s.host for s in config.ixnet_servers}
     db_list: list[ServerEntry] = fleet.list_servers()
-    db_names_set = {e.name for e in db_list}
-    for entry in db_list:
-        host_by_name[entry.name] = entry.host
+    host_by_name: dict[str, str] = {e.name: e.host for e in db_list}
 
-    # Server rows must match the poller DB list so ixnetwork_web_status keys align.
-    # Order: DB servers first, then config-only names (e.g. tests / pre-seed edge cases).
     if server is not None:
         server_names_ordered = [server]
     else:
         server_names_ordered = [e.name for e in db_list]
-        for s in config.ixnet_servers:
-            if s.name not in db_names_set:
-                server_names_ordered.append(s.name)
 
     sessions_by_server: dict[str, list[Session]] = {name: [] for name in server_names_ordered}
     for sess in sessions:
@@ -150,6 +140,7 @@ async def list_sessions(
         sessions_by_server[sess.ixnet_server].append(sess)
 
     web_by: dict = getattr(request.app.state, "ixnetwork_web_status", {}) or {}
+    poll_errors: dict = getattr(request.app.state, "poll_errors", {}) or {}
 
     servers_payload = []
     for name, slist in sessions_by_server.items():
@@ -158,6 +149,7 @@ async def list_sessions(
             "host": host_by_name.get(name, name),
             "sessions": [_session_dict(s) for s in slist],
             "session_count": len(slist),
+            "poll_error": poll_errors.get(name),  # None when last poll succeeded
         }
         row.update(_ixnetwork_web_panel_from_state(web_by.get(name)))
         servers_payload.append(row)
@@ -226,7 +218,6 @@ async def delete_session(
         )
 
     fleet: FleetState = request.app.state.fleet
-    config = request.app.state.config
 
     session = fleet.get_session(server, session_id)
     if session is None:
@@ -235,9 +226,7 @@ async def delete_session(
             detail=f"Session '{session_id}' on server '{server}' not found.",
         )
 
-    server_cfg = next(
-        (s for s in config.ixnet_servers if s.name == server), None
-    )
+    server_cfg = fleet.get_server(server)
     if server_cfg is None:
         raise HTTPException(
             status_code=404,
@@ -280,7 +269,6 @@ async def collect_session_logs(
     attachment.  The temporary file is cleaned up after the response is sent.
     """
     fleet: FleetState = request.app.state.fleet
-    config = request.app.state.config
 
     if fleet.get_session(server, session_id) is None:
         raise HTTPException(
@@ -288,9 +276,7 @@ async def collect_session_logs(
             detail=f"Session '{session_id}' on server '{server}' not found.",
         )
 
-    server_cfg = next(
-        (s for s in config.ixnet_servers if s.name == server), None
-    )
+    server_cfg = fleet.get_server(server)
     if server_cfg is None:
         raise HTTPException(
             status_code=404,

@@ -45,9 +45,10 @@ document.getElementById("servers-container").addEventListener("click", e => {
     return;
   }
 
-  if (action === "tag")   showTagModal(session);
+  if (action === "tag")        showTagModal(session);
   else if (action === "kill")  showKillConfirm(session);
   else if (action === "logs")  collectLogs(session, btn);
+  else if (action === "errors") showErrorsModal(session);
 });
 
 // ---------------------------------------------------------------------------
@@ -355,6 +356,10 @@ function buildServerBlock(server) {
     : "";
 
   const consoleUrl = buildIxWebConsoleUrl(server.host, server.rest_port ?? null);
+  const pollError  = server.poll_error ?? null;
+  const pollErrorHtml = pollError
+    ? `<span class="server-poll-error" title="${escapeHtml(pollError)}">Connection Failed</span>`
+    : "";
 
   block.innerHTML = `
     <div class="server-header" role="button" tabindex="0"
@@ -366,6 +371,7 @@ function buildServerBlock(server) {
             aria-label="IxNetwork Web status: ${escapeHtml(hb)}"></span>
       <span class="server-name">${escapeHtml(server.name)}</span>
       <span class="server-host">(${escapeHtml(server.host)})</span>
+      ${pollErrorHtml}
       <span class="${ixWebDeploymentClass(dep, hb, checkedAt)}"
             title="${escapeHtml(depTitle)}">${depLabel}</span>
       ${versionHtml}
@@ -551,6 +557,31 @@ function renderSessionRows(session) {
     ? `<div class="tag-list">${session.tags.map(t => `<span class="tag">${escapeHtml(t)}</span>`).join("")}</div>`
     : "";
 
+  // Session state badge
+  const rawState = (session.session_state ?? "").toLowerCase();
+  let stateCls = "session-state-badge";
+  if (rawState === "active")  stateCls += " state-active";
+  else if (rawState === "stopped") stateCls += " state-stopped";
+  else if (rawState === "initial") stateCls += " state-initial";
+  const stateHtml = session.session_state
+    ? `<span class="${stateCls}">${escapeHtml(session.session_state)}</span>`
+    : "";
+
+  // Error status pill
+  const hasError   = (session.error_status ?? "NOERROR") === "ERROR";
+  const errCount   = session.error_count ?? 0;
+  const errClass   = hasError ? "error" : "noerror";
+  const errLabel   = hasError
+    ? `&#10007; ${errCount} Error${errCount !== 1 ? "s" : ""}`
+    : "&#10003; OK";
+  const errTitle   = hasError
+    ? `${errCount} kError-level AppError(s) detected — click to view`
+    : "No errors detected";
+  const errAction  = hasError ? `data-action="errors"` : "";
+  const errBtnClass = hasError
+    ? `btn btn-error-status error btn-action`
+    : `btn btn-error-status noerror`;
+
   const sid    = escapeHtml(String(session.id));
   const server = escapeHtml(session.ixnet_server ?? "");
 
@@ -564,12 +595,18 @@ function renderSessionRows(session) {
   const sessionCell = `
     <td class="col-session"${rowspan}>
       <span class="session-name">${escapeHtml(session.name)}</span>
+      ${stateHtml}
       ${tagsHtml}
     </td>`;
 
   const actionsCells = `
     <td class="col-actions"${rowspan}>
       <div class="actions-cell">
+        <button class="${errBtnClass}"
+                ${errAction}
+                data-session-id="${sid}"
+                data-server="${server}"
+                title="${escapeHtml(errTitle)}">${errLabel}</button>
         <button class="btn btn-tag btn-action"
                 data-action="tag"
                 data-session-id="${sid}"
@@ -738,6 +775,43 @@ function showTagModal(session) {
 
   openModal("modal-tag");
   document.getElementById("tag-input-field").focus();
+}
+
+/**
+ * showErrorsModal — display kError-level AppErrors for a session.
+ *
+ * @param {Object} session — session object from _sessionCache
+ */
+function showErrorsModal(session) {
+  const name     = session.name ?? session.id;
+  const errors   = session.error_list ?? [];
+  const count    = session.error_count ?? 0;
+  const hasError = (session.error_status ?? "NOERROR") === "ERROR";
+
+  const nameEl = document.getElementById("modal-errors-session-name");
+  const bodyEl = document.getElementById("modal-errors-body");
+
+  nameEl.textContent = name;
+
+  if (!hasError || errors.length === 0) {
+    bodyEl.innerHTML = `
+      <div class="error-list-empty">
+        <span style="color:var(--green);font-size:1rem;">&#10003;</span>
+        No kError-level AppErrors detected on this session.
+      </div>`;
+  } else {
+    const countBadge = `<span class="error-count-badge">${count} total</span>`;
+    const items = errors
+      .map(e => `<li>${escapeHtml(e)}</li>`)
+      .join("");
+    bodyEl.innerHTML = `
+      <p style="font-size:0.75rem;color:var(--text-dim);margin-bottom:4px;">
+        kError-level AppErrors${countBadge}
+      </p>
+      <ul class="error-list">${items}</ul>`;
+  }
+
+  openModal("modal-errors");
 }
 
 /**
@@ -1754,6 +1828,101 @@ document.getElementById("btn-bulk-import-submit").addEventListener("click", subm
 document.getElementById("bulk-import-textarea").addEventListener("input", previewBulkImport);
 
 // ---------------------------------------------------------------------------
+// Poller Settings
+// ---------------------------------------------------------------------------
+
+/**
+ * fetchPollConfig — GET /poll/config, update the control-bar display.
+ */
+async function fetchPollConfig() {
+  try {
+    const resp = await fetch(`${API_BASE_URL}/poll/config`, {
+      headers: { "Accept": "application/json" },
+    });
+    if (!resp.ok) return;
+    const body = await resp.json();
+    const secs = body.data?.interval_seconds ?? 60;
+    _updatePollIntervalDisplay(secs);
+  } catch (_) {
+    // Non-fatal — display keeps its default
+  }
+}
+
+function _updatePollIntervalDisplay(seconds) {
+  const el = document.getElementById("poll-interval-display");
+  if (el) el.textContent = `${seconds}s`;
+}
+
+/**
+ * openPollerSettings — load current config and show the modal.
+ */
+async function openPollerSettings() {
+  const errEl = document.getElementById("modal-poller-error");
+  errEl.textContent = "";
+  errEl.style.display = "none";
+
+  // Pre-fill with current value shown in the button
+  const currentText = document.getElementById("poll-interval-display")?.textContent ?? "60s";
+  const currentVal  = parseInt(currentText, 10) || 60;
+  document.getElementById("poller-interval-input").value = currentVal;
+
+  openModal("modal-poller-settings");
+  document.getElementById("poller-interval-input").focus();
+}
+
+/**
+ * savePollerConfig — PATCH /poll/config with the new interval.
+ */
+async function savePollerConfig() {
+  const raw    = document.getElementById("poller-interval-input").value.trim();
+  const secs   = parseInt(raw, 10);
+  const errEl  = document.getElementById("modal-poller-error");
+  errEl.textContent = "";
+  errEl.style.display = "none";
+
+  if (!raw || isNaN(secs) || secs < 10 || secs > 3600) {
+    errEl.textContent = "Interval must be a number between 10 and 3600.";
+    errEl.style.display = "block";
+    return;
+  }
+
+  const saveBtn = document.getElementById("btn-poller-save");
+  saveBtn.disabled = true;
+  saveBtn.textContent = "Saving…";
+
+  try {
+    const resp = await fetch(`${API_BASE_URL}/poll/config`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify({ interval_seconds: secs }),
+    });
+
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.detail ?? `HTTP ${resp.status}`);
+    }
+
+    _updatePollIntervalDisplay(secs);
+    showToast(`Poll interval set to ${secs}s.`, "ok");
+    closeModal("modal-poller-settings");
+
+  } catch (err) {
+    errEl.textContent = `Error: ${err.message}`;
+    errEl.style.display = "block";
+  } finally {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Save";
+  }
+}
+
+document.getElementById("btn-poller-settings").addEventListener("click", openPollerSettings);
+document.getElementById("btn-poller-save").addEventListener("click", savePollerConfig);
+document.getElementById("poller-interval-input").addEventListener("keydown", e => {
+  if (e.key === "Enter") savePollerConfig();
+});
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 fetchSessions();
+fetchPollConfig();

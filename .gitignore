@@ -27,3 +27,6 @@ build/
 *.sqlite3
 .env
 .env.local
+
+# Vendored wheels (downloaded by `make vendor`; not committed)
+backend/vendor/*.whl
