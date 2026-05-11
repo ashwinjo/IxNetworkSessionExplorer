@@ -7,7 +7,7 @@
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='5' fill='%230b0f14'/><rect width='32' height='32' rx='5' fill='none' stroke='%2300c8e8' stroke-width='1.5' stroke-opacity='0.4'/><text x='3' y='21' font-family='monospace' font-size='14' font-weight='700' fill='%2300c8e8'>Ix</text><text x='3' y='30' font-family='monospace' font-size='9' font-weight='500' fill='%238baabb' letter-spacing='1'>NSE</text></svg>" />
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Syne+Mono&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
@@ -40,6 +40,44 @@
       </div>
     </div>
   </header>
+
+  <!-- ================================================================
+       STATS BAR
+       ================================================================ -->
+  <div id="stats-bar">
+    <div class="stat-group">
+      <div class="stat-item">
+        <span class="stat-value" id="stat-servers">—</span>
+        <span class="stat-label">Servers</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-value" id="stat-sessions">—</span>
+        <span class="stat-label">Sessions</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item stat-item--active">
+        <span class="stat-value" id="stat-active">—</span>
+        <span class="stat-label">Active</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item stat-item--utilized">
+        <span class="stat-value" id="stat-utilized">—</span>
+        <span class="stat-label">Utilized</span>
+      </div>
+    </div>
+    <div class="stat-group stat-group--right">
+      <div class="stat-item">
+        <span class="stat-value" id="stat-servers-online">—</span>
+        <span class="stat-label">Online</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item stat-item--errors">
+        <span class="stat-value" id="stat-errors">—</span>
+        <span class="stat-label">Errors</span>
+      </div>
+    </div>
+  </div>
 
   <!-- ================================================================
        CONTROL BAR
@@ -362,6 +400,13 @@
       </div>
     </div>
   </div>
+
+  <!-- ================================================================
+       FOOTER
+       ================================================================ -->
+  <footer id="page-footer">
+    <span>To know more about IxNetwork Automation <a href="https://ixnetwork-automation.netlify.app/" target="_blank" rel="noopener noreferrer">click here</a></span>
+  </footer>
 
   <!-- ================================================================
        TOAST CONTAINER

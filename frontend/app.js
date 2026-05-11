@@ -288,6 +288,25 @@ function ixWebHeartbeatTitle(server) {
  *
  * @param {Array} servers  — array of server objects from GET /sessions
  */
+function updateStats(servers) {
+  const totalSessions   = servers.reduce((a, s) => a + (s.session_count ?? (s.sessions ?? []).length), 0);
+  const activeSessions  = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.cp_active || sess.dp_active).length, 0);
+  const utilizedSessions = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.utilized).length, 0);
+  const errorSessions   = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.error_status === "ERROR").length, 0);
+  const serversOnline   = servers.filter(s => !s.poll_error).length;
+
+  const el = id => document.getElementById(id);
+  el("stat-servers").textContent        = servers.length;
+  el("stat-sessions").textContent       = totalSessions;
+  el("stat-active").textContent         = activeSessions;
+  el("stat-utilized").textContent       = utilizedSessions;
+  el("stat-servers-online").textContent = `${serversOnline}/${servers.length}`;
+
+  const errEl = el("stat-errors");
+  errEl.textContent = errorSessions;
+  errEl.classList.toggle("has-errors", errorSessions > 0);
+}
+
 function renderServers(servers) {
   const container = document.getElementById("servers-container");
 
@@ -300,6 +319,8 @@ function renderServers(servers) {
 
   // Clear stale cache before each full render so removed sessions don't linger.
   _sessionCache.clear();
+
+  updateStats(servers ?? []);
 
   if (!servers || servers.length === 0) {
     container.innerHTML = `<div class="state-empty">No IxNetwork servers configured.</div>`;
@@ -573,7 +594,7 @@ function renderSessionRows(session) {
   const errClass   = hasError ? "error" : "noerror";
   const errLabel   = hasError
     ? `&#10007; ${errCount} Error${errCount !== 1 ? "s" : ""}`
-    : "&#10003; OK";
+    : "&#10003; NOERROR";
   const errTitle   = hasError
     ? `${errCount} kError-level AppError(s) detected — click to view`
     : "No errors detected";
