@@ -415,3 +415,104 @@ class TestDeleteSession:
         fleet.upsert_session(make_session("s1", "ghost-server"))
         resp = client.delete("/sessions/ghost-server/s1?confirm=true")
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# Port utilization endpoint tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetPortUtilized:
+    """Tests for GET /sessions/ports/{chassis}/{card}/{port}/utilized."""
+
+    def test_port_not_assigned_returns_false(self, client: TestClient) -> None:
+        """No sessions in fleet — any port query returns utilized=False."""
+        resp = client.get("/sessions/ports/lab-01/1/1/utilized")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["utilized"] is False
+        assert data["cp_active"] is False
+        assert data["dp_active"] is False
+        assert data["session_id"] is None
+        assert data["ixnet_server"] is None
+
+    def test_port_with_cp_active_returns_utilized_true(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """Port with CP active → utilized=True."""
+        port = SessionPort(chassis_name="lab-01", card=2, port=3, cp_active=True, dp_active=False)
+        session = Session(
+            id="sess-cp",
+            name="cp-test",
+            ixnet_server="ixnet-sv-01",
+            ports=[port],
+            last_polled=datetime.now(UTC),
+        )
+        fleet.upsert_session(session)
+        resp = client.get("/sessions/ports/lab-01/2/3/utilized")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["utilized"] is True
+        assert data["cp_active"] is True
+        assert data["dp_active"] is False
+        assert data["session_id"] == "sess-cp"
+        assert data["ixnet_server"] == "ixnet-sv-01"
+
+    def test_port_with_dp_active_returns_utilized_true(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """Port with DP active → utilized=True."""
+        port = SessionPort(chassis_name="lab-01", card=1, port=5, cp_active=False, dp_active=True)
+        session = Session(
+            id="sess-dp",
+            name="dp-test",
+            ixnet_server="ixnet-sv-01",
+            ports=[port],
+            last_polled=datetime.now(UTC),
+        )
+        fleet.upsert_session(session)
+        resp = client.get("/sessions/ports/lab-01/1/5/utilized")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["utilized"] is True
+        assert data["cp_active"] is False
+        assert data["dp_active"] is True
+
+    def test_port_assigned_but_idle_returns_utilized_false(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """Port assigned to a session but both CP and DP inactive → utilized=False."""
+        port = SessionPort(chassis_name="lab-01", card=3, port=1, cp_active=False, dp_active=False)
+        session = Session(
+            id="sess-idle",
+            name="idle-test",
+            ixnet_server="ixnet-sv-01",
+            ports=[port],
+            last_polled=datetime.now(UTC),
+        )
+        fleet.upsert_session(session)
+        resp = client.get("/sessions/ports/lab-01/3/1/utilized")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["utilized"] is False
+        assert data["session_id"] == "sess-idle"
+
+    def test_card_port_mismatch_returns_false(
+        self, client: TestClient, fleet: FleetState
+    ) -> None:
+        """Port exists in fleet but queried with wrong card/port → utilized=False."""
+        port = SessionPort(chassis_name="lab-01", card=4, port=2, cp_active=True, dp_active=True)
+        session = Session(
+            id="sess-mismatch",
+            name="mismatch-test",
+            ixnet_server="ixnet-sv-01",
+            ports=[port],
+            last_polled=datetime.now(UTC),
+        )
+        fleet.upsert_session(session)
+        # Query a different card/port combination
+        resp = client.get("/sessions/ports/lab-01/4/9/utilized")
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["utilized"] is False
+        assert data["session_id"] is None

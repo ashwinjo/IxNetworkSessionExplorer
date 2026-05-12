@@ -157,6 +157,49 @@ async def list_sessions(
     return _ok({"servers": servers_payload})
 
 
+@router.get(
+    "/ports/{chassis}/{card}/{port}/utilized",
+    summary="Check if a port is in use (CP or DP active)",
+)
+async def get_port_utilized(
+    request: Request,
+    chassis: str,
+    card: int,
+    port: int,
+) -> dict:
+    """Return utilized status for a physical port identified by chassis/card/port.
+
+    Scans all sessions for a matching SessionPort. Returns utilized=False if the
+    port is not assigned to any session (unassigned = not in use).
+
+    Always returns 200 — an unassigned port is a valid query, not an error.
+    """
+    fleet: FleetState = request.app.state.fleet
+    for session in fleet.get_all():
+        for sp in session.ports:
+            if sp.chassis_name == chassis and sp.card == card and sp.port == port:
+                return _ok({
+                    "chassis": chassis,
+                    "card": card,
+                    "port": port,
+                    "utilized": sp.utilized,
+                    "cp_active": sp.cp_active,
+                    "dp_active": sp.dp_active,
+                    "session_id": session.id,
+                    "ixnet_server": session.ixnet_server,
+                })
+    return _ok({
+        "chassis": chassis,
+        "card": card,
+        "port": port,
+        "utilized": False,
+        "cp_active": False,
+        "dp_active": False,
+        "session_id": None,
+        "ixnet_server": None,
+    })
+
+
 @router.get("/{server}/{session_id}", summary="Get session detail")
 async def get_session_detail(request: Request, server: str, session_id: str) -> dict:
     """Return full detail for a single session including ports, plane status, and tags."""
