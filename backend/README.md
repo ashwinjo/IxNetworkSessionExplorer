@@ -102,14 +102,55 @@ export IXNET_PASSWORD="your-password"
 
 ## API Endpoints
 
-- `GET /sessions` - List all sessions
-- `GET /sessions/{server}/{id}` - Session detail
-- `PATCH /sessions/{server}/{id}/tags` - Add/remove tags
-- `DELETE /sessions/{server}/{id}?confirm=true` - Kill session
-- `POST /poll/trigger` - Force immediate poll
-- `GET /poll/status` - Last poll status
+See OpenAPI docs (`/docs`) for full specification with request/response schemas.
 
-See OpenAPI docs (`/docs`) for full specification.
+### Sessions
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/sessions/` | List all sessions grouped by server |
+| `GET` | `/sessions/ports/{chassis}/{card}/{port}/utilized` | Check if a port has CP or DP active |
+| `GET` | `/sessions/{server}/{session_id}` | Session detail (ports, plane status, tags) |
+| `PATCH` | `/sessions/{server}/{session_id}/tags` | Add/remove tags on a session |
+| `DELETE` | `/sessions/{server}/{session_id}?confirm=true` | Kill and evict a session |
+| `POST` | `/sessions/{server}/{session_id}/collect-logs` | Collect diagnostic logs (returns zip) |
+
+Query params for `GET /sessions/`:
+- `?server=<name>` — filter by IxNetwork server
+- `?tag=<label>` — filter by tag
+
+### Servers
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/servers/` | List all configured IxNetwork servers |
+| `POST` | `/servers/` | Add a new server |
+| `POST` | `/servers/bulk` | Bulk add/update servers |
+| `DELETE` | `/servers/bulk` | Bulk delete servers by name |
+| `PATCH` | `/servers/bulk/password` | Set password for multiple servers |
+| `PUT` | `/servers/{name}` | Update a server |
+| `PATCH` | `/servers/{name}/tags` | Add/remove tags on a server |
+| `DELETE` | `/servers/{name}` | Remove a server |
+| `POST` | `/servers/{name}/test` | Test connectivity to a server |
+| `POST` | `/servers/{name}/probe-web` | Debug IxNetwork Web HTTPS auth probe |
+
+### Poll Control
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `POST` | `/poll/trigger` | Force an immediate poll cycle |
+| `GET` | `/poll/status` | Current poller state (last run, next scheduled) |
+| `GET` | `/poll/config` | Get current poll interval |
+| `PATCH` | `/poll/config` | Update poll interval (10–3600 seconds) |
+
+### Health & Observability
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/health/` | Fleet health summary |
+| `GET` | `/chassis/` | List all chassis |
+| `GET` | `/chassis/{name}/health` | Chassis health detail |
+| `GET` | `/metrics` | Prometheus metrics (text/plain) |
 
 ## Development
 
