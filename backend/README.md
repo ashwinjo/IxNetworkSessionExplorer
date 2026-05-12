@@ -143,13 +143,15 @@ Query params for `GET /sessions/`:
 | `GET` | `/poll/config` | Get current poll interval |
 | `PATCH` | `/poll/config` | Update poll interval (10–3600 seconds) |
 
-### Health & Observability
+### Health & Observability ⚠️ WIP
+
+> These endpoints are scaffolded but not fully implemented. Responses are placeholders until chassis/IxOS integration is complete.
 
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/health/` | Fleet health summary |
-| `GET` | `/chassis/` | List all chassis |
-| `GET` | `/chassis/{name}/health` | Chassis health detail |
+| `GET` | `/chassis/` | List all chassis (returns empty list) |
+| `GET` | `/chassis/{name}/health` | Chassis health detail (returns 404) |
 | `GET` | `/metrics` | Prometheus metrics (text/plain) |
 
 ## Development
