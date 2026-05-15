@@ -384,6 +384,23 @@ header::before {
   box-shadow: 0 0 12px var(--cyan-glow);
 }
 
+/* Refresh button progress bar (::after, survives textContent changes) */
+#btn-refresh {
+  position: relative;
+  overflow: hidden;
+}
+#btn-refresh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: var(--btn-progress, 0%);
+  background: linear-gradient(90deg, rgba(0, 160, 255, 0.55) 0%, rgba(0, 220, 255, 0.35) 100%);
+  border-right: 2px solid rgba(0, 200, 255, 0.95);
+  box-shadow: inset 0 0 12px rgba(0, 180, 255, 0.25);
+  transition: width var(--btn-progress-dur, 0.1s) linear;
+  pointer-events: none;
+}
+
 /* Neutral */
 .btn-neutral {
   background: transparent;
@@ -993,6 +1010,7 @@ header::before {
   letter-spacing: 0.01em;
 }
 .state-error { color: var(--crimson); }
+.state-error-detail { display: block; margin-top: 6px; color: var(--text-dim); font-size: 0.78rem; }
 
 .spinner {
   display: inline-block;

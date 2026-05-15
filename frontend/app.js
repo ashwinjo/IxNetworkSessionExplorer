@@ -158,7 +158,10 @@ async function triggerRefresh() {
   const btn = document.getElementById("btn-refresh");
   if (btn) {
     btn.disabled = true;
-    btn.textContent = "Refreshing…";
+    btn.textContent = "Requesting…";
+    // Animate progress bar toward 85% over 28s (covers worst-case poll time)
+    btn.style.setProperty("--btn-progress-dur", "28s");
+    btn.style.setProperty("--btn-progress", "85%");
   }
 
   try {
@@ -180,10 +183,20 @@ async function triggerRefresh() {
     console.warn(`POST /poll/trigger failed: ${err.message} — falling back to direct fetch`);
     showToast(msg, "error");
   } finally {
+    // Snap progress bar to 100% before fetching sessions
+    if (btn) {
+      btn.style.setProperty("--btn-progress-dur", "0.2s");
+      btn.style.setProperty("--btn-progress", "100%");
+    }
     await fetchSessions();
     if (btn) {
       btn.disabled = false;
       btn.textContent = "↺ Refresh Now";
+      // Hold 100% briefly then fade the bar out
+      await new Promise(r => setTimeout(r, 350));
+      btn.style.setProperty("--btn-progress-dur", "0.3s");
+      btn.style.removeProperty("--btn-progress");
+      setTimeout(() => btn.style.removeProperty("--btn-progress-dur"), 350);
     }
   }
 }
@@ -289,22 +302,16 @@ function ixWebHeartbeatTitle(server) {
  * @param {Array} servers  — array of server objects from GET /sessions
  */
 function updateStats(servers) {
-  const totalSessions   = servers.reduce((a, s) => a + (s.session_count ?? (s.sessions ?? []).length), 0);
-  const activeSessions  = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.cp_active || sess.dp_active).length, 0);
-  const utilizedSessions = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.utilized).length, 0);
-  const errorSessions   = servers.reduce((a, s) => a + (s.sessions ?? []).filter(sess => sess.error_status === "ERROR").length, 0);
-  const serversOnline   = servers.filter(s => !s.poll_error).length;
+  const reachable      = servers.filter(s => !s.poll_error);
+  const totalSessions  = reachable.reduce((a, s) => a + (s.session_count ?? (s.sessions ?? []).length), 0);
+  const activeSessions = reachable.reduce((a, s) => a + (s.sessions ?? []).filter(
+    sess => (sess.session_state ?? "").toLowerCase() === "active"
+  ).length, 0);
 
   const el = id => document.getElementById(id);
-  el("stat-servers").textContent        = servers.length;
-  el("stat-sessions").textContent       = totalSessions;
-  el("stat-active").textContent         = activeSessions;
-  el("stat-utilized").textContent       = utilizedSessions;
-  el("stat-servers-online").textContent = `${serversOnline}/${servers.length}`;
-
-  const errEl = el("stat-errors");
-  errEl.textContent = errorSessions;
-  errEl.classList.toggle("has-errors", errorSessions > 0);
+  el("stat-servers").textContent  = servers.length;
+  el("stat-sessions").textContent = totalSessions;
+  el("stat-active").textContent   = activeSessions;
 }
 
 function renderServers(servers) {
@@ -354,8 +361,8 @@ function buildServerBlock(server) {
   block.className = "server-block collapsed";
   block.dataset.serverName = server.name;
 
-  // Prefer server.session_count from API; fall back to sessions array length.
-  const sessionCount = server.session_count ?? (server.sessions ?? []).length;
+  // Suppress session count for unreachable servers — stale numbers mislead.
+  const sessionCount = (server.poll_error) ? 0 : (server.session_count ?? (server.sessions ?? []).length);
 
   const hb        = server.ixnetwork_web_heartbeat ?? "yellow";
   const dep       = server.ixnetwork_web_deployment ?? null;
@@ -411,7 +418,12 @@ function buildServerBlock(server) {
       </a>
     </div>
     <div class="server-sessions" id="sessions-${sanitizeId(server.name)}">
-      ${buildSessionTable(server.sessions ?? [], server.name)}
+      ${pollError
+        ? `<div class="state-error" style="padding:20px 16px;">
+             Server unreachable — session data unavailable.
+             <span class="state-error-detail">${escapeHtml(pollError)}</span>
+           </div>`
+        : buildSessionTable(server.sessions ?? [], server.name)}
     </div>
   `;
 
