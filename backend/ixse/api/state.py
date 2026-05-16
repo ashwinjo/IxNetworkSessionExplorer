@@ -172,7 +172,7 @@ class FleetState:
         self._conn.executescript(_DDL)
         self._conn.commit()
         self._migrate()
-
+        self._purge_orphaned_sessions()
         self._warm_cache()
 
     # ------------------------------------------------------------------
@@ -201,6 +201,17 @@ class FleetState:
                 self._conn.commit()
             except sqlite3.OperationalError:
                 pass  # column already exists — nothing to do
+
+    def _purge_orphaned_sessions(self) -> None:
+        """Delete sessions whose server no longer exists in the servers table.
+
+        Runs at startup before the cache is warmed so stale rows from
+        previously deleted servers never surface in API responses.
+        """
+        self._conn.execute(
+            "DELETE FROM sessions WHERE ixnet_server NOT IN (SELECT name FROM servers)"
+        )
+        self._conn.commit()
 
     def _warm_cache(self) -> None:
         """Populate the in-memory cache from all existing DB rows."""
