@@ -1955,6 +1955,44 @@ document.getElementById("poller-interval-input").addEventListener("keydown", e =
 });
 
 // ---------------------------------------------------------------------------
+// View Tabs — Sessions / Tutorial
+// ---------------------------------------------------------------------------
+(function initViewTabs() {
+  const tabSessions   = document.getElementById("tab-sessions");
+  const tabTutorial   = document.getElementById("tab-tutorial");
+  const panelSessions = document.getElementById("panel-sessions");
+  const panelTutorial = document.getElementById("panel-tutorial");
+
+  function activateTab(active, inactive, showPanel, hidePanel) {
+    active.classList.add("view-tab--active");
+    active.setAttribute("aria-selected", "true");
+    active.tabIndex = 0;
+    inactive.classList.remove("view-tab--active");
+    inactive.setAttribute("aria-selected", "false");
+    inactive.tabIndex = -1;
+    showPanel.hidden = false;
+    hidePanel.hidden = true;
+  }
+
+  tabSessions.addEventListener("click", () =>
+    activateTab(tabSessions, tabTutorial, panelSessions, panelTutorial));
+
+  tabTutorial.addEventListener("click", () =>
+    activateTab(tabTutorial, tabSessions, panelTutorial, panelSessions));
+
+  [tabSessions, tabTutorial].forEach(tab => {
+    tab.addEventListener("keydown", e => {
+      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
+        e.preventDefault();
+        const next = tab === tabSessions ? tabTutorial : tabSessions;
+        next.click();
+        next.focus();
+      }
+    });
+  });
+})();
+
+// ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
 fetchSessions();

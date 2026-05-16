@@ -64,6 +64,27 @@
   </div>
 
   <!-- ================================================================
+       VIEW TABS
+       ================================================================ -->
+  <nav id="view-tabs" role="tablist" aria-label="Main view">
+    <button id="tab-sessions" class="view-tab view-tab--active" role="tab"
+            aria-selected="true" aria-controls="panel-sessions" tabindex="0">
+      <svg class="view-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6h14"/><path d="M5 6v7"/></svg>
+      Sessions
+    </button>
+    <button id="tab-tutorial" class="view-tab" role="tab"
+            aria-selected="false" aria-controls="panel-tutorial" tabindex="-1">
+      <svg class="view-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>
+      Tutorial
+    </button>
+  </nav>
+
+  <!-- ================================================================
+       SESSIONS PANEL (control bar + session list)
+       ================================================================ -->
+  <div id="panel-sessions">
+
+  <!-- ================================================================
        CONTROL BAR
        ================================================================ -->
   <div id="control-bar">
@@ -127,6 +148,252 @@
       </div>
     </div>
   </main>
+
+  </div><!-- /#panel-sessions -->
+
+  <!-- ================================================================
+       TUTORIAL PANEL
+       ================================================================ -->
+  <div id="panel-tutorial" role="tabpanel" aria-labelledby="tab-tutorial" hidden>
+    <div class="tut-page">
+
+      <!-- ── Page heading ─────────────────────────────────────────── -->
+      <div class="tut-hero">
+        <div class="tut-hero-logo" aria-hidden="true"><span class="logo-ix">Ix</span><span class="logo-se">NSE</span></div>
+        <div>
+          <h2 class="tut-hero-title">IxNetwork Session Explorer</h2>
+          <p class="tut-hero-sub">Unified dashboard for tracking IxNetwork sessions across all chassis in your lab</p>
+        </div>
+      </div>
+
+      <!-- ── Quick Start ──────────────────────────────────────────── -->
+      <section class="tut-section">
+        <h3 class="tut-section-title">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1l2 5h5l-4 3 1.5 5L8 11l-4.5 3L5 9 1 6h5z"/></svg>
+          Quick Start
+        </h3>
+        <ol class="tut-steps">
+          <li class="tut-step">
+            <span class="tut-step-num">01</span>
+            <div class="tut-step-body">
+              <strong>Add an IxNetwork server</strong>
+              <p>Click <span class="tut-kbd">Manage Servers</span> in the top-right header, then <span class="tut-kbd">Add Server</span>. Enter the server's <em>name</em>, <em>host / IP</em>, <em>username</em>, and <em>password</em>. REST port defaults to <code>443</code> (IxNetwork Web) or <code>11009</code> (IxNetwork Classic). Use <span class="tut-kbd">Test Connection</span> to verify credentials before saving.</p>
+            </div>
+          </li>
+          <li class="tut-step">
+            <span class="tut-step-num">02</span>
+            <div class="tut-step-body">
+              <strong>Wait for the first poll</strong>
+              <p>After saving, the backend polls the server automatically within the configured interval (default 60 s). The <span class="tut-badge tut-badge--live">LIVE</span> indicator in the header confirms real-time polling. Click <span class="tut-kbd">Refresh</span> in the toolbar to force an immediate poll.</p>
+            </div>
+          </li>
+          <li class="tut-step">
+            <span class="tut-step-num">03</span>
+            <div class="tut-step-body">
+              <strong>Explore your sessions</strong>
+              <p>Each IxNetwork server appears as a collapsible block. Click the block header to expand it and see all active sessions. The <span class="tut-badge tut-badge--green">Active</span> counter in the stats bar shows how many sessions have control-plane or data-plane activity.</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <!-- ── Two-column grid ──────────────────────────────────────── -->
+      <div class="tut-grid">
+
+        <!-- Server Blocks -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="14" height="4" rx="1"/><rect x="1" y="9" width="14" height="4" rx="1"/><circle cx="4" cy="5" r=".8" fill="currentColor" stroke="none"/><circle cx="4" cy="11" r=".8" fill="currentColor" stroke="none"/></svg>
+            Server Blocks
+          </h3>
+          <p class="tut-desc">Each block represents one IxNetwork server. Click the header row to collapse or expand its session list.</p>
+          <dl class="tut-dl">
+            <dt><span class="tut-dot tut-dot--green"></span>Green dot</dt>
+            <dd>Server is reachable and responding normally</dd>
+            <dt><span class="tut-dot tut-dot--amber"></span>Amber dot</dt>
+            <dd>Server reachable but returned a partial result or auth warning</dd>
+            <dt><span class="tut-dot tut-dot--red"></span>Red dot</dt>
+            <dd>Server unreachable or poll failed — check credentials</dd>
+            <dt><span class="tut-chip tut-chip--cyan">Standalone</span></dt>
+            <dd>IxNetwork Web running standalone (dedicated VM)</dd>
+            <dt><span class="tut-chip tut-chip--amber">On-Chassis</span></dt>
+            <dd>IxNetwork Web running directly on the chassis</dd>
+          </dl>
+        </section>
+
+        <!-- Stats Bar -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12l3-4 3 2 3-5 3 3"/></svg>
+            Stats Bar
+          </h3>
+          <p class="tut-desc">Live aggregate counts across all monitored servers, updated on every poll cycle.</p>
+          <dl class="tut-dl">
+            <dt>Servers</dt>
+            <dd>Total number of IxNetwork servers registered in the tool</dd>
+            <dt>Sessions</dt>
+            <dd>Total open sessions visible across all servers</dd>
+            <dt><span class="tut-stat-val tut-stat-val--green">Active</span></dt>
+            <dd>Sessions where CP or DP is active (actually using resources)</dd>
+          </dl>
+        </section>
+
+        <!-- Session Table Columns -->
+        <section class="tut-section tut-card tut-card--wide">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6h14M5 6v7"/></svg>
+            Session Table — Column Reference
+          </h3>
+          <div class="tut-col-grid">
+            <div class="tut-col-card">
+              <span class="tut-col-name">SESSION</span>
+              <p>Session name assigned by the IxNetwork user. Below the name: a state badge (<span class="tut-badge tut-badge--green">Active</span> / <span class="tut-badge tut-badge--amber">Initial</span> / Stopped) and any amber tags you've applied.</p>
+            </div>
+            <div class="tut-col-card">
+              <span class="tut-col-name">CHASSIS</span>
+              <p>Physical chassis hostname and port location that the virtual port is mapped to. LLDP neighbor info (connected switch / port) is shown below in smaller text when available.</p>
+            </div>
+            <div class="tut-col-card">
+              <span class="tut-col-name">PORT</span>
+              <p>IxNetwork virtual port name plus a link-state dot. <span class="tut-dot tut-dot--green" style="display:inline-block"></span> = link up, <span class="tut-dot tut-dot--amber" style="display:inline-block"></span> = link down.</p>
+            </div>
+            <div class="tut-col-card">
+              <span class="tut-col-name tut-col-name--cyan">CP</span>
+              <p><strong>Control Plane.</strong> <span class="tut-badge tut-badge--green">✓</span> means at least one protocol engine (BGP, OSPF, ISIS, etc.) has active device groups on this session's ports. The session is actively running protocol emulation.</p>
+            </div>
+            <div class="tut-col-card">
+              <span class="tut-col-name tut-col-name--cyan">DP</span>
+              <p><strong>Data Plane.</strong> <span class="tut-badge tut-badge--green">✓</span> means traffic is actively flowing through the physical ports (non-zero frame counters). Requires IxOS chassis integration.</p>
+            </div>
+            <div class="tut-col-card">
+              <span class="tut-col-name tut-col-name--green">UTILIZED</span>
+              <p>Logical OR of CP and DP. A session is <em>utilized</em> if it is doing anything meaningful — running protocols <strong>or</strong> passing traffic. Non-utilized sessions may be safe to clean up.</p>
+            </div>
+          </div>
+        </section>
+
+        <!-- Session Actions -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 2l3 3-7 7H4V9l7-7z"/></svg>
+            Session Actions
+          </h3>
+          <dl class="tut-dl">
+            <dt><span class="tut-action-btn">Details</span></dt>
+            <dd>Expands an inline sub-table showing per-vport details: chassis slot, IP, link state, LLDP neighbor switch and port. Click again to collapse.</dd>
+            <dt><span class="tut-action-btn tut-action-btn--amber">Tag</span></dt>
+            <dd>Attach one or more comma-separated labels to a session (e.g. <code>bgp, owner:ashwin, lab-a</code>). Tags are persisted in the database and survive poll cycles. Use them to track ownership or test purpose.</dd>
+            <dt><span class="tut-action-btn">Logs</span></dt>
+            <dd>Download a diagnostic log bundle for the session. Available only when the server is reachable.</dd>
+            <dt><span class="tut-action-btn tut-action-btn--danger">Kill</span></dt>
+            <dd><strong>Irreversible.</strong> Permanently terminates the IxNetwork session and releases all reserved ports. A confirmation modal always appears before execution.</dd>
+          </dl>
+        </section>
+
+        <!-- Search & Filter -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4"/><path d="M11 11l3 3"/></svg>
+            Search &amp; Filter
+          </h3>
+          <p class="tut-desc">The search box in the control bar filters all visible sessions in real time — no page reload required.</p>
+          <dl class="tut-dl">
+            <dt>Session name</dt>
+            <dd>Type any part of the session name to narrow results</dd>
+            <dt>Chassis</dt>
+            <dd>Filter by chassis hostname or IP (e.g. <code>lab-01</code>)</dd>
+            <dt>Tag</dt>
+            <dd>Filter by a tag you've applied (e.g. <code>bgp</code> or <code>owner:ashwin</code>)</dd>
+          </dl>
+          <p class="tut-tip">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>
+            Sessions on collapsed server blocks are also filtered — expand to see them.
+          </p>
+        </section>
+
+        <!-- Poll Settings -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="2.5"/><path d="M8 1v2M8 13v2M1 8h2M13 8h2M3.05 3.05l1.42 1.42M11.53 11.53l1.42 1.42M3.05 12.95l1.42-1.42M11.53 4.47l1.42-1.42"/></svg>
+            Poll &amp; Auto-Refresh
+          </h3>
+          <dl class="tut-dl">
+            <dt><span class="tut-action-btn">Refresh</span></dt>
+            <dd>Triggers an immediate backend poll of all servers and refreshes the UI. The progress bar in the button shows poll completion.</dd>
+            <dt><span class="tut-action-btn">Auto-refresh: OFF</span></dt>
+            <dd>Toggles a 30-second client-side UI refresh. Keeps the page current without you clicking Refresh manually. The dot turns green when active.</dd>
+            <dt>Poll: <code>60s</code></dt>
+            <dd>Click the gear button to change how often the backend polls IxNetwork servers. Range: 10–3600 s. Persisted in the database.</dd>
+          </dl>
+          <p class="tut-tip">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>
+            Polling runs server-side regardless of browser state. Close the tab and data will still be collected.
+          </p>
+        </section>
+
+        <!-- Color Legend -->
+        <section class="tut-section tut-card tut-card--wide">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 4v4l3 2"/></svg>
+            Color &amp; Status Legend
+          </h3>
+          <div class="tut-legend-grid">
+            <div class="tut-legend-item">
+              <div class="tut-legend-swatch tut-legend-swatch--cyan"></div>
+              <div><strong>Cyan</strong><p>Interactive elements — buttons, links, active column headers, focused inputs. Cyan = something you can act on.</p></div>
+            </div>
+            <div class="tut-legend-item">
+              <div class="tut-legend-swatch tut-legend-swatch--green"></div>
+              <div><strong>Green</strong><p>Active / healthy state — session with CP or DP active, server reachable, link up, UTILIZED = YES, Active stat counter.</p></div>
+            </div>
+            <div class="tut-legend-item">
+              <div class="tut-legend-swatch tut-legend-swatch--amber"></div>
+              <div><strong>Amber</strong><p>Degraded / informational — session in Initial state, link down, server with auth warning, and all applied session tags.</p></div>
+            </div>
+            <div class="tut-legend-item">
+              <div class="tut-legend-swatch tut-legend-swatch--crimson"></div>
+              <div><strong>Crimson</strong><p>Error / danger — unreachable server, session errors, the Kill action, and any destructive confirmation dialogs.</p></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Managing Servers -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 4h12M5 4V2h6v2M6 7v5M10 7v5M3 4l1 10h8l1-10"/></svg>
+            Managing Servers
+          </h3>
+          <dl class="tut-dl">
+            <dt>Add Server</dt>
+            <dd>Open <span class="tut-kbd">Manage Servers</span> → <span class="tut-kbd">Add Server</span>. Name and host are required. REST port defaults to 443.</dd>
+            <dt>Bulk Import</dt>
+            <dd>Paste multiple servers as CSV lines:<br/><code class="tut-code">name,host,username,password[,rest_port]</code></dd>
+            <dt>Edit / Delete</dt>
+            <dd>Each server row has edit (pencil) and delete (trash) icons. Deleting removes it from future polls but does not touch the actual IxNetwork server.</dd>
+            <dt>Bulk password</dt>
+            <dd>Select multiple servers via checkboxes, then click <span class="tut-kbd">Update Password</span> to set a new credential for all selected at once.</dd>
+          </dl>
+        </section>
+
+        <!-- Tips -->
+        <section class="tut-section tut-card">
+          <h3 class="tut-section-title">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 1a4 4 0 010 8"/><path d="M8 9v2M6 13h4"/><path d="M8 9a4 4 0 010-8"/></svg>
+            Tips &amp; Shortcuts
+          </h3>
+          <ul class="tut-tips-list">
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span><strong>Expand / Collapse All</strong> buttons in the toolbar let you quickly see or hide all session tables at once.</span></li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span>Tags survive backend polls — stored in local SQLite, not on the IxNetwork server.</span></li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span>Use <code>owner:name</code> tag conventions to track who owns a session across a shared lab.</span></li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span>LLDP neighbor data in chassis cells shows which switch port a test port is cabled to.</span></li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span>A pulsing crimson error badge on a session row means IxNetwork reported app errors — click to read them.</span></li>
+            <li><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M3 8l3 3 7-6"/></svg><span>The API is available at <code>/docs</code> (Swagger UI) for programmatic access or scripting.</span></li>
+          </ul>
+        </section>
+
+      </div><!-- /.tut-grid -->
+    </div><!-- /.tut-page -->
+  </div><!-- /#panel-tutorial -->
 
   <!-- ================================================================
        MODAL: Tag Session
