@@ -86,12 +86,23 @@ if ! command -v docker >/dev/null 2>&1; then
     fi
 fi
 
+docker_daemon_running() {
+    # Prefer socket-agnostic systemctl check; fall back to sudo docker info
+    if command -v systemctl >/dev/null 2>&1; then
+        systemctl is-active --quiet docker
+    else
+        sudo docker info >/dev/null 2>&1
+    fi
+}
+
 if ! docker info >/dev/null 2>&1; then
-    if is_ubuntu && command -v systemctl >/dev/null 2>&1; then
+    if docker_daemon_running; then
+        : # Daemon is up — user just lacks socket permission (not in docker group yet)
+    elif is_ubuntu && command -v systemctl >/dev/null 2>&1; then
         info "Docker daemon not running — starting..."
         sudo systemctl start docker
         sleep 2
-        docker info >/dev/null 2>&1 || fatal "Docker daemon failed to start; check: sudo journalctl -u docker"
+        docker_daemon_running || fatal "Docker daemon failed to start; check: sudo journalctl -u docker"
         ok "Docker daemon started"
     else
         fatal "Docker daemon is not running — start it first"
