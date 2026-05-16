@@ -1644,6 +1644,7 @@ async function deleteServer() {
     closeModal("modal-server-delete");
     _serverDeleteTarget = null;
     await refreshServerList();
+    await fetchSessions();
   } catch (err) {
     errEl.textContent = `Error: ${err.message}`;
     errEl.style.display = "block";

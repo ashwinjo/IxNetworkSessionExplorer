@@ -438,13 +438,21 @@ class FleetState:
             self._conn.commit()
 
     def delete_server(self, name: str) -> bool:
-        """Delete a server by name. Returns True if a row was deleted, False if not found."""
+        """Delete a server and all its sessions. Returns True if server row deleted."""
         with self._lock:
             cursor = self._conn.execute(
                 "DELETE FROM servers WHERE name = ?", (name,)
             )
+            deleted = cursor.rowcount > 0
+            if deleted:
+                self._conn.execute(
+                    "DELETE FROM sessions WHERE ixnet_server = ?", (name,)
+                )
+                stale = [k for k in self._cache if k[0] == name]
+                for k in stale:
+                    del self._cache[k]
             self._conn.commit()
-            return cursor.rowcount > 0
+            return deleted
 
     def bulk_upsert_servers(self, servers: list[ServerEntry]) -> list[dict]:
         """Insert-or-replace each server. Returns one result dict per entry.
@@ -496,6 +504,13 @@ class FleetState:
                 cursor = self._conn.execute(
                     "DELETE FROM servers WHERE name = ?", (name,)
                 )
+                if cursor.rowcount > 0:
+                    self._conn.execute(
+                        "DELETE FROM sessions WHERE ixnet_server = ?", (name,)
+                    )
+                    stale = [k for k in self._cache if k[0] == name]
+                    for k in stale:
+                        del self._cache[k]
                 results.append({
                     "name": name,
                     "action": "deleted" if cursor.rowcount > 0 else "not_found",
