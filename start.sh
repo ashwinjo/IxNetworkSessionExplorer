@@ -124,6 +124,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 [[ -f docker-compose.yml ]] || fatal "docker-compose.yml not found in $SCRIPT_DIR"
+BIND_ADDR="${IXSE_BIND_ADDR:-0.0.0.0}"
 
 # ── build ─────────────────────────────────────────────────────────────────────
 if $BUILD; then
@@ -163,8 +164,8 @@ ok "Frontend container started"
 printf "\n${BLD}${CYN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
 printf "${BLD}  IxNetwork Session Explorer — Services${RST}\n"
 printf "${BLD}${CYN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n"
-printf "  ${GRN}%-20s${RST} %s\n" "Frontend UI"      "http://localhost:3000"
-printf "  ${GRN}%-20s${RST} %s\n" "Backend API"      "http://localhost:8080"
-printf "  ${GRN}%-20s${RST} %s\n" "API Docs"         "http://localhost:8080/docs"
-printf "  ${GRN}%-20s${RST} %s\n" "Health Check"     "http://localhost:8080/health/"
+printf "  ${GRN}%-20s${RST} %s\n" "Frontend UI"      "http://${BIND_ADDR}:3000"
+printf "  ${GRN}%-20s${RST} %s\n" "Backend API"      "http://${BIND_ADDR}:8080"
+printf "  ${GRN}%-20s${RST} %s\n" "API Docs"         "http://${BIND_ADDR}:8080/docs"
+printf "  ${GRN}%-20s${RST} %s\n" "Health Check"     "http://${BIND_ADDR}:8080/health/"
 printf "${BLD}${CYN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RST}\n\n"

@@ -6,7 +6,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     ports:
-      - "8080:8080"
+      - "${IXSE_BIND_ADDR:-0.0.0.0}:8080:8080"
     volumes:
       # Persist the SQLite database (servers + sessions + poll config) across restarts:
       - ixse_db:/app/data
@@ -27,7 +27,7 @@ services:
   frontend:
     image: nginx:alpine
     ports:
-      - "3000:80"
+      - "${IXSE_BIND_ADDR:-0.0.0.0}:3000:80"
     volumes:
       - ./frontend:/usr/share/nginx/html:ro
     depends_on:
