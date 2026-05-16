@@ -10,12 +10,20 @@ No config file required. All servers are added and managed through the UI. Setti
 
 ### Prerequisites
 
-- Docker + `docker compose`
+- `git`
+- `sudo` privileges (Ubuntu only — needed for automatic Docker install)
 - Access to one or more IxNetwork servers
+
+> **On Ubuntu 20.04+:** `start.sh` automatically installs Docker CE, the compose plugin, and `curl` if they are missing. No manual Docker setup needed.
+>
+> **On other systems:** Install [Docker](https://docs.docker.com/engine/install/) and the compose plugin manually before running `start.sh`.
+
+> **Container base image:** `python:3.11-slim` (Debian-based, ~130 MB). Runs on any Linux host regardless of host distro.
 
 ### 1. Clone
 
 ```bash
+sudo apt install -y git          # Ubuntu only — skip if git already installed
 git clone https://github.com/yourusername/IxNetworkSessionExplorer.git
 cd IxNetworkSessionExplorer
 ```
@@ -23,12 +31,16 @@ cd IxNetworkSessionExplorer
 ### 2. Start
 
 ```bash
-./start.sh
+./start.sh --build   # first run: builds the backend image (~2 min)
+./start.sh           # subsequent runs: instant start, no rebuild
 ```
 
-First run builds the backend image (~2 min). Subsequent starts are instant.
-
-To force a rebuild: `./start.sh --build`
+`start.sh` sequentially:
+1. Installs missing dependencies (Ubuntu only: `curl`, Docker CE, compose plugin)
+2. Starts the Docker daemon if not running
+3. Builds images (only with `--build`)
+4. Starts the backend and waits for `/health/` to pass
+5. Starts the frontend
 
 ### 3. Add servers
 
