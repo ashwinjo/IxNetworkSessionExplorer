@@ -436,6 +436,40 @@ def create_app() -> FastAPI:
         }
 
     # ------------------------------------------------------------------
+    # Admin: clear detection caches
+    # ------------------------------------------------------------------
+
+    @application.post(
+        "/admin/clear-cache",
+        summary="Clear KCOS and IxNetwork-Web detection caches",
+        tags=["admin"],
+    )
+    async def clear_cache(request: Request) -> dict:
+        """Wipe kcos_cache (SQLite) and ixnetwork_web_status (in-memory).
+
+        Re-fires KCOS SSH probes for every registered server in the background.
+        The UI will reflect updated detection on the next refresh cycle.
+        """
+        from ixse.api.routers.servers import _run_kcos_probe
+
+        fleet: FleetState = request.app.state.fleet
+        evicted = fleet.clear_kcos_cache()
+        request.app.state.ixnetwork_web_status.clear()
+
+        servers = fleet.list_servers()
+        for server in servers:
+            asyncio.create_task(_run_kcos_probe(fleet, server))
+
+        return {
+            "status": "ok",
+            "data": {
+                "kcos_cache_evicted": evicted,
+                "kcos_probes_scheduled": len(servers),
+            },
+            "timestamp": _now_iso(),
+        }
+
+    # ------------------------------------------------------------------
     # Prometheus metrics endpoint
     # ------------------------------------------------------------------
 

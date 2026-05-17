@@ -217,6 +217,34 @@ async function triggerRefresh() {
 }
 
 /**
+ * clearCache — POST /admin/clear-cache to wipe KCOS + IxNetwork-Web caches
+ * and re-probe all servers, then refresh sessions.
+ */
+async function clearCache() {
+  const btn = document.getElementById("btn-clear-cache");
+  if (btn) { btn.disabled = true; btn.textContent = "Clearing…"; }
+  try {
+    const resp = await fetch(`${API_BASE_URL}/admin/clear-cache`, {
+      method: "POST",
+      headers: { "Accept": "application/json" },
+    });
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const body = await resp.json();
+    const { kcos_cache_evicted = 0, kcos_probes_scheduled = 0 } = body.data ?? {};
+    showToast(
+      `Cache cleared — ${kcos_cache_evicted} KCOS entr${kcos_cache_evicted === 1 ? "y" : "ies"} evicted, ` +
+      `${kcos_probes_scheduled} probe${kcos_probes_scheduled === 1 ? "" : "s"} scheduled`,
+      "success",
+    );
+    await triggerRefresh();
+  } catch (err) {
+    showToast(`Clear cache failed: ${err.message}`, "error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Clear Cache"; }
+  }
+}
+
+/**
  * IxNetwork Web panel (from GET /sessions server row).
  *
  * @param {string|undefined|null} d          ixnetwork_web_deployment
@@ -1224,6 +1252,7 @@ function sanitizeId(str) {
 // ---------------------------------------------------------------------------
 
 document.getElementById("btn-refresh").addEventListener("click", triggerRefresh);
+document.getElementById("btn-clear-cache").addEventListener("click", clearCache);
 
 document.getElementById("btn-expand-all").addEventListener("click", expandAll);
 document.getElementById("btn-collapse-all").addEventListener("click", collapseAll);

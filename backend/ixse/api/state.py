@@ -497,6 +497,13 @@ class FleetState:
                 self._conn.execute("DELETE FROM kcos_cache WHERE host = ?", (host,))
             self._conn.commit()
 
+    def clear_kcos_cache(self) -> int:
+        """Delete all rows from kcos_cache. Returns number of rows deleted."""
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM kcos_cache")
+            self._conn.commit()
+            return cur.rowcount
+
     def bulk_upsert_servers(self, servers: list[ServerEntry]) -> list[dict]:
         """Insert-or-replace each server. Returns one result dict per entry.
 

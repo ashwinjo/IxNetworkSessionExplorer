@@ -45,14 +45,20 @@ def _public(entry: ServerEntry) -> dict:
 
 
 async def _run_kcos_probe(fleet: FleetState, entry: ServerEntry) -> None:
-    """Run the KCOS SSH probe in a thread and persist the result."""
+    """Run the KCOS SSH probe in a thread and persist the result.
+
+    Only updates the cache when the probe returns a positive KCOS result.
+    A None result (SSH failure or non-KCOS host) is silently ignored so that
+    a transient SSH error never evicts a previously confirmed KCOS entry.
+    """
     from ixse.kcos import probe_kcos
 
     loop = asyncio.get_event_loop()
     result = await loop.run_in_executor(
         None, probe_kcos, entry.host, entry.username, entry.password
     )
-    fleet.update_kcos_info(entry.host, KcosInfo(**result) if result else None)
+    if result is not None:
+        fleet.update_kcos_info(entry.host, KcosInfo(**result))
 
 
 # ---------------------------------------------------------------------------
