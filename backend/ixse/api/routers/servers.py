@@ -271,6 +271,16 @@ async def update_server(name: str, body: ServerUpdateRequest, request: Request) 
     )
     fleet.upsert_server(updated)
 
+    # Re-probe KCOS if host or credentials changed — kcos_cache key is host,
+    # so a host change means the old cache entry is for the wrong IP.
+    creds_changed = (
+        body.host is not None or
+        body.username is not None or
+        body.password is not None
+    )
+    if creds_changed:
+        asyncio.create_task(_run_kcos_probe(fleet, updated))
+
     return {
         "status": "ok",
         "data": _public(updated),
