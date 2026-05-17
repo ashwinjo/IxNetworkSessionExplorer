@@ -58,6 +58,10 @@
   --radius-lg:       8px;
   --radius-xl:       12px;
 
+  /* ── Toast text ── */
+  --toast-ok-text:    rgba(0, 230, 118, 0.85);
+  --toast-error-text: rgba(255, 130, 150, 0.90);
+
   /* ── Motion ── */
   --ease:            150ms ease;
   --ease-med:        220ms ease;
@@ -158,6 +162,18 @@ body[data-theme="day"] .stat-divider { background: var(--border-med); }
 body[data-theme="day"] .sessions-table thead th { background: var(--surface-alt); color: var(--text-muted); border-bottom-color: var(--border-med); }
 body[data-theme="day"] .sessions-table tbody tr:hover td { background: var(--surface-hover); }
 body[data-theme="day"] .sessions-table tbody td { border-bottom-color: var(--border); }
+
+/* Toast — Keysight Teal (#07858b) for success, Dark Red (#871518) for error */
+body[data-theme="day"] {
+  --toast-ok-text:    #07858b;
+  --toast-error-text: #871518;
+}
+body[data-theme="day"] .toast {
+  background: #ffffff;
+  border-color: var(--border-med);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  color: var(--text);
+}
 
 /* ----- Theme Slider widget ------------------------------------------ */
 .theme-slider {
@@ -1441,8 +1457,8 @@ header::before {
   max-width: 360px;
   pointer-events: all;
 }
-.toast.toast-error { border-left-color: var(--crimson); color: rgba(255, 130, 150, 0.9); }
-.toast.toast-ok    { border-left-color: var(--green);   color: rgba(0, 230, 118, 0.85); }
+.toast.toast-error { border-left-color: var(--crimson); color: var(--toast-error-text); }
+.toast.toast-ok    { border-left-color: var(--green);   color: var(--toast-ok-text); }
 @keyframes toastIn {
   from { transform: translateX(110%); opacity: 0; }
   to   { transform: translateX(0);    opacity: 1; }
