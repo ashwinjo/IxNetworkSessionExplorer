@@ -33,6 +33,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _resolve_server(fleet: FleetState, name_or_host: str) -> ServerEntry | None:
+    """Look up server by name first, then by host IP/hostname."""
+    entry = fleet.get_server(name_or_host)
+    if entry is not None:
+        return entry
+    for s in fleet.list_servers():
+        if s.host == name_or_host:
+            return s
+    return None
+
+
 def _public(entry: ServerEntry) -> dict:
     return ServerEntryPublic(
         name=entry.name,
@@ -246,7 +257,7 @@ async def create_server(body: ServerCreateRequest, request: Request) -> dict:
 @router.put("/{name}", summary="Update an existing IxNetwork server")
 async def update_server(name: str, body: ServerUpdateRequest, request: Request) -> dict:
     fleet = request.app.state.fleet
-    existing = fleet.get_server(name)
+    existing = _resolve_server(fleet, name)
     if existing is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
@@ -275,14 +286,16 @@ async def update_server_tags(name: str, body: TagsUpdateRequest, request: Reques
     remove).  Either list may be empty.  Operations are idempotent.
     """
     fleet = request.app.state.fleet
-    if fleet.get_server(name) is None:
+    existing = _resolve_server(fleet, name)
+    if existing is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+    canonical = existing.name
     try:
-        server = fleet.get_server(name)
+        server = existing
         for tag in body.add:
-            server = fleet.add_server_tag(name, tag)
+            server = fleet.add_server_tag(canonical, tag)
         for tag in body.remove:
-            server = fleet.remove_server_tag(name, tag)
+            server = fleet.remove_server_tag(canonical, tag)
         return {"status": "ok", "data": _public(server), "timestamp": _now_iso()}  # type: ignore[arg-type]
     except StateError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -300,7 +313,7 @@ async def delete_server(name: str, request: Request) -> dict:
 async def test_server(name: str, request: Request) -> dict:
     """Attempt a quick RestPy connect/disconnect to verify credentials."""
     fleet = request.app.state.fleet
-    server = fleet.get_server(name)
+    server = _resolve_server(fleet, name)
     if server is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
@@ -331,7 +344,7 @@ async def probe_server_kcos(name: str, request: Request) -> dict:
     reflect the updated kcos_info on the next poll/refresh cycle.
     """
     fleet: FleetState = request.app.state.fleet
-    entry = fleet.get_server(name)
+    entry = _resolve_server(fleet, name)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
@@ -352,7 +365,7 @@ async def probe_server_kcos_debug(name: str, request: Request) -> dict:
     from ixse.kcos import probe_kcos_verbose
 
     fleet: FleetState = request.app.state.fleet
-    entry = fleet.get_server(name)
+    entry = _resolve_server(fleet, name)
     if entry is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
@@ -384,7 +397,7 @@ async def probe_web(name: str, request: Request) -> dict:
     from ixse.ixn_web import probe_web_verbose
 
     fleet = request.app.state.fleet
-    server = fleet.get_server(name)
+    server = _resolve_server(fleet, name)
     if server is None:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
 
