@@ -1587,6 +1587,11 @@ async function saveServerForm() {
     await refreshServerList();
     // Re-run poll (IxNetwork Web probe + RestPy) so new server row gets heartbeat/deployment.
     await triggerRefresh();
+    // KCOS SSH probe runs in the background (~5–15 s). Schedule a follow-up
+    // fetch so the KCOS label appears without waiting for the 30 s auto-refresh.
+    if (mode === "add") {
+      setTimeout(fetchSessions, 15_000);
+    }
 
   } catch (err) {
     errEl.textContent = `Error: ${err.message}`;

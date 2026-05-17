@@ -327,13 +327,24 @@ async def lifespan(app: FastAPI):  # type: ignore[type-arg]
     app.state.ixnetwork_web_status = {}
     app.state.poll_errors: dict[str, str] = {}  # server_name -> last error message
 
-    db_server_count = len(state.list_servers())
+    all_servers = state.list_servers()
+    db_server_count = len(all_servers)
     logger.info(
         "IxNetworkSessionExplorer started. %d server(s) in DB. "
         "Poll interval: %ds. Use POST /poll/trigger to fetch sessions immediately.",
         db_server_count,
         interval_seconds,
     )
+
+    # Schedule KCOS SSH probe for any server that has no cached kcos_info.
+    # Runs in parallel background tasks — does not block startup.
+    from ixse.api.routers.servers import _run_kcos_probe
+
+    unprobed = [s for s in all_servers if s.kcos_info is None]
+    if unprobed:
+        logger.info("Scheduling KCOS probe for %d server(s) without cached kcos_info.", len(unprobed))
+        for _srv in unprobed:
+            asyncio.create_task(_run_kcos_probe(state, _srv))
 
     poller_task = asyncio.create_task(poll_fleet(app))
 
