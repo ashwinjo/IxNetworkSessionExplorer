@@ -51,6 +51,21 @@ document.getElementById("servers-container").addEventListener("click", e => {
   else if (action === "errors") showErrorsModal(session);
 });
 
+// LLDP checkbox — toggle details-row visibility
+document.getElementById("servers-container").addEventListener("change", e => {
+  const cb = e.target.closest(".lldp-checkbox");
+  if (!cb) return;
+  const { sessionId, server } = cb.dataset;
+  const tbl = cb.closest("table");
+  if (!tbl) return;
+  for (const row of tbl.querySelectorAll(".details-row")) {
+    if (row.dataset.sessionId === sessionId && row.dataset.server === server) {
+      row.hidden = !cb.checked;
+      break;
+    }
+  }
+});
+
 // ---------------------------------------------------------------------------
 // API helpers
 // ---------------------------------------------------------------------------
@@ -705,7 +720,7 @@ function renderSessionRows(session) {
         <td class="col-chassis">${chassis}</td>
         <td class="col-port port-cell">${portLabel}</td>
         ${portStatusCells}
-      </tr>${isLast ? buildDetailsRowHtml(session) : ""}`;
+      </tr>${isLast ? buildDetailsRowHtml(session, sid, server) : ""}`;
   }).join("");
 }
 
@@ -1969,40 +1984,18 @@ document.getElementById("poller-interval-input").addEventListener("keydown", e =
 });
 
 // ---------------------------------------------------------------------------
-// View Tabs — Sessions / Tutorial
+// Tutorial Toggle — header button shows/hides the tutorial panel
 // ---------------------------------------------------------------------------
-(function initViewTabs() {
-  const tabSessions   = document.getElementById("tab-sessions");
-  const tabTutorial   = document.getElementById("tab-tutorial");
+(function initTutorialToggle() {
+  const btnTutorial   = document.getElementById("tab-tutorial");
   const panelSessions = document.getElementById("panel-sessions");
   const panelTutorial = document.getElementById("panel-tutorial");
 
-  function activateTab(active, inactive, showPanel, hidePanel) {
-    active.classList.add("view-tab--active");
-    active.setAttribute("aria-selected", "true");
-    active.tabIndex = 0;
-    inactive.classList.remove("view-tab--active");
-    inactive.setAttribute("aria-selected", "false");
-    inactive.tabIndex = -1;
-    showPanel.hidden = false;
-    hidePanel.hidden = true;
-  }
-
-  tabSessions.addEventListener("click", () =>
-    activateTab(tabSessions, tabTutorial, panelSessions, panelTutorial));
-
-  tabTutorial.addEventListener("click", () =>
-    activateTab(tabTutorial, tabSessions, panelTutorial, panelSessions));
-
-  [tabSessions, tabTutorial].forEach(tab => {
-    tab.addEventListener("keydown", e => {
-      if (e.key === "ArrowRight" || e.key === "ArrowLeft") {
-        e.preventDefault();
-        const next = tab === tabSessions ? tabTutorial : tabSessions;
-        next.click();
-        next.focus();
-      }
-    });
+  btnTutorial.addEventListener("click", () => {
+    const isOpen = !panelTutorial.hidden;
+    panelTutorial.hidden = isOpen;
+    panelSessions.hidden = !isOpen;
+    btnTutorial.classList.toggle("btn--active", !isOpen);
   });
 })();
 

@@ -31,6 +31,10 @@
         <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="3" width="14" height="4" rx="1"/><rect x="1" y="9" width="14" height="4" rx="1"/><circle cx="4" cy="5" r=".8" fill="currentColor" stroke="none"/><circle cx="4" cy="11" r=".8" fill="currentColor" stroke="none"/></svg>
         Manage Servers
       </button>
+      <button id="tab-tutorial" class="btn btn-neutral" title="View tutorial and navigation guide">
+        <svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>
+        Tutorial
+      </button>
       <svg class="logo-icon" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" style="display:none">
         <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
       </svg>
@@ -63,23 +67,7 @@
     </div>
   </div>
 
-  <!-- ================================================================
-       VIEW TABS
-       ================================================================ -->
-  <nav id="view-tabs" role="tablist" aria-label="Main view">
-    <button id="tab-sessions" class="view-tab view-tab--active" role="tab"
-            aria-selected="true" aria-controls="panel-sessions" tabindex="0">
-      <svg class="view-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="1" y="3" width="14" height="10" rx="1.5"/><path d="M1 6h14"/><path d="M5 6v7"/></svg>
-      Sessions
-    </button>
-    <button id="tab-tutorial" class="view-tab" role="tab"
-            aria-selected="false" aria-controls="panel-tutorial" tabindex="-1">
-      <svg class="view-tab-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>
-      Tutorial
-    </button>
-  </nav>
-
-  <!-- ================================================================
+<!-- ================================================================
        SESSIONS PANEL (control bar + session list)
        ================================================================ -->
   <div id="panel-sessions">

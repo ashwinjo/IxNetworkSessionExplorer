@@ -1457,57 +1457,41 @@ header::before {
 .import-preview-table { margin-top: 0; max-height: 180px; overflow-y: auto; display: block; }
 .import-preview-table thead { position: sticky; top: 0; }
 
-/* ----- View Tabs ---------------------------------------------------- */
-#view-tabs {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  padding: 0 28px;
-  display: flex;
-  gap: 0;
-  position: sticky;
-  top: 60px;
-  z-index: 90;
+/* ----- Tutorial header button active state -------------------------- */
+.btn--active {
+  color: var(--cyan) !important;
+  border-color: rgba(0, 200, 232, 0.45) !important;
+  background: var(--cyan-dim) !important;
+}
+.btn--active:hover:not(:disabled) {
+  background: rgba(0, 200, 232, 0.14) !important;
+  border-color: rgba(0, 200, 232, 0.65) !important;
 }
 
-.view-tab {
-  position: relative;
-  padding: 0 20px;
-  height: 42px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-dim);
-  font-size: 0.76rem;
-  font-family: var(--font-ui);
-  font-weight: 500;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  cursor: pointer;
-  transition: color var(--ease), border-color var(--ease);
-  white-space: nowrap;
+/* ----- LLDP checkbox toggle in session cell ------------------------- */
+.lldp-toggle-label {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  margin-bottom: -1px;
+  gap: 5px;
+  margin-top: 7px;
+  font-size: 0.67rem;
+  font-family: var(--font-ui);
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--ease);
+}
+.lldp-toggle-label:hover { color: var(--cyan); }
+.lldp-checkbox {
+  accent-color: var(--cyan);
+  width: 11px;
+  height: 11px;
+  cursor: pointer;
   flex-shrink: 0;
 }
-
-.view-tab-icon {
-  width: 13px;
-  height: 13px;
-  flex-shrink: 0;
-  opacity: 0.7;
-  transition: opacity var(--ease);
-}
-
-.view-tab:hover { color: var(--text-muted); }
-
-.view-tab--active {
-  color: var(--cyan);
-  border-bottom-color: var(--cyan);
-}
-
-.view-tab--active .view-tab-icon { opacity: 1; }
 
 /* ----- Tutorial Panel ----------------------------------------------- */
 #panel-tutorial {
@@ -1865,7 +1849,6 @@ header::before {
   .tut-card--wide { grid-column: 1; }
   .tut-col-grid { grid-template-columns: 1fr 1fr; }
   .tut-legend-grid { grid-template-columns: 1fr; }
-  #view-tabs { padding: 0 16px; }
   #panel-tutorial { padding: 20px 16px 40px; }
 }
 
