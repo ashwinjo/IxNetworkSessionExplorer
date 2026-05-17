@@ -55,8 +55,9 @@ logger = logging.getLogger(__name__)
 def _parse_location(raw: str) -> tuple[str, int, int] | None:
     """Parse a vport location string into (chassis, card, port).
 
-    Handles all three formats observed in the wild:
-      - Location   field: "10.36.236.121;6;3"   (semicolon-separated — preferred)
+    Handles all formats observed in the wild:
+      - Location   field: "10.36.65.163/2.2"    (chassis/card.port — preferred)
+      - Location   field: "10.36.236.121;6;3"   (semicolon-separated)
       - AssignedTo field: "10.36.236.121:6:3"   (colon-separated)
       - Legacy REST path: "//10.36.236.121/6/3"  (slash-separated)
 
@@ -66,7 +67,18 @@ def _parse_location(raw: str) -> tuple[str, int, int] | None:
     if not raw:
         return None
 
-    # Try semicolon first (Location field), then colon (AssignedTo), then slash
+    # Try "chassis/card.port" format first (modern Location field)
+    if "/" in raw and "." in raw.split("/")[-1]:
+        parts = raw.rsplit("/", 1)
+        if len(parts) == 2:
+            dot_parts = parts[1].split(".")
+            if len(dot_parts) == 2:
+                try:
+                    return parts[0], int(dot_parts[0]), int(dot_parts[1])
+                except (ValueError, IndexError):
+                    pass
+
+    # Fall back: semicolon (Location), colon (AssignedTo), slash (legacy REST path)
     for sep in (";", ":", "/"):
         parts = [p for p in raw.split(sep) if p]
         if len(parts) >= 3:
@@ -99,16 +111,17 @@ def _parse_vports(
     """
     ports: list[SessionPort] = []
     for vp in vports:
-        vport_name       = str(getattr(vp, "Name",            "") or "")
-        connection_state = str(getattr(vp, "ConnectionState", "") or "")
-        vport_type       = str(getattr(vp, "Type",            "") or "")
+        vport_name       = str(getattr(vp, "Name",                    "") or "")
+        fqpn             = str(getattr(vp, "FullyQualifiedPortName", "") or "")
+        connection_state = str(getattr(vp, "ConnectionState",        "") or "")
+        vport_type       = str(getattr(vp, "Type",                   "") or "")
         actual_speed_raw = getattr(vp, "ActualSpeed", 0)
         try:
             actual_speed = int(actual_speed_raw)
         except (TypeError, ValueError):
             actual_speed = 0
 
-        # Prefer Location (semicolon), fall back to AssignedTo (colon/slash)
+        # Prefer Location (chassis/card.port), fall back to AssignedTo (colon/slash)
         location_str = str(getattr(vp, "Location",   "") or "")
         assigned_str = str(getattr(vp, "AssignedTo", "") or "")
         parsed = _parse_location(location_str) or _parse_location(assigned_str)
@@ -117,6 +130,14 @@ def _parse_vports(
             continue
 
         chassis_name, card, port = parsed
+
+        # If Location is "chassis/X.Y" format, use "X.Y" as the display label.
+        # Falls back to FullyQualifiedPortName, then empty (UI renders card/port).
+        loc_parts = location_str.rsplit("/", 1)
+        if len(loc_parts) == 2 and "." in loc_parts[1]:
+            port_label = loc_parts[1]  # e.g. "2.2"
+        else:
+            port_label = fqpn if fqpn and fqpn != "N/A" else ""
 
         # Per-port CP detection via topology → device group status
         vport_href = str(getattr(vp, "href", "") or "")
@@ -136,6 +157,7 @@ def _parse_vports(
                     card=card,
                     port=port,
                     vport_name=vport_name,
+                    fully_qualified_port_name=port_label,
                     connection_state=connection_state,
                     vport_type=vport_type,
                     actual_speed=actual_speed,

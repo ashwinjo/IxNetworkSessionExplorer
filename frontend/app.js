@@ -521,7 +521,7 @@ function buildSessionTable(sessions, serverName) {
  * @returns {string} HTML string
  */
 function buildPortCell(p) {
-  const num   = escapeHtml(`${p.card}/${p.port}`);
+  const num   = escapeHtml(p.fully_qualified_port_name || `${p.card}/${p.port}`);
   const speedLabel = p.actual_speed > 0
     ? (p.actual_speed >= 1000 ? `${p.actual_speed / 1000}G` : `${p.actual_speed}M`)
     : "";
@@ -558,7 +558,7 @@ function buildDetailsRowHtml(session, sid, server) {
   const portRows = ports.length > 0
     ? ports.map(p => {
         const chassis = escapeHtml(typeof p === "object" ? (p.chassis_name ?? "—") : String(p));
-        const portNum = typeof p === "object" ? escapeHtml(`${p.card}/${p.port}`) : "—";
+        const portNum = typeof p === "object" ? escapeHtml(p.fully_qualified_port_name || `${p.card}/${p.port}`) : "—";
 
         let lldpCells = `<td class="lldp-col lldp-none">—</td>
                          <td class="lldp-col lldp-none">—</td>
