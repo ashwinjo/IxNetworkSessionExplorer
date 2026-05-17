@@ -339,6 +339,38 @@ async def probe_server_kcos(name: str, request: Request) -> dict:
     return {"status": "ok", "message": "KCOS probe scheduled", "timestamp": _now_iso()}
 
 
+@router.post("/{name}/probe-kcos-debug", summary="Run KCOS SSH probe synchronously and return full debug output")
+async def probe_server_kcos_debug(name: str, request: Request) -> dict:
+    """Run the KCOS SSH banner probe synchronously and return full diagnostic detail.
+
+    Shows: whether SSH connected, raw MOTD received, whether KCOS marker was found,
+    and the error message if SSH failed.  Useful for diagnosing why a server is not
+    detected as KCOS.
+
+    This also persists the result — if KCOS is detected, kcos_cache is updated immediately.
+    """
+    from ixse.kcos import probe_kcos_verbose
+
+    fleet: FleetState = request.app.state.fleet
+    entry = fleet.get_server(name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, probe_kcos_verbose, entry.host, entry.username, entry.password
+    )
+
+    if result["kcos_detected"] and result["kcos_info"]:
+        fleet.update_kcos_info(entry.host, KcosInfo(**result["kcos_info"]))
+
+    return {
+        "status": "ok",
+        "data": result,
+        "timestamp": _now_iso(),
+    }
+
+
 @router.post("/{name}/probe-web", summary="Debug IxNetwork Web HTTPS auth probe")
 async def probe_web(name: str, request: Request) -> dict:
     """Run the IxNetwork Web HTTPS auth probe immediately and return full debug detail.

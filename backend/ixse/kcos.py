@@ -108,3 +108,84 @@ def probe_kcos(
             client.close()
         except Exception:  # noqa: BLE001
             pass
+
+
+def probe_kcos_verbose(
+    host: str,
+    username: str,
+    password: str,
+    timeout: float = 10.0,
+    motd_wait: float = 5.0,
+) -> dict:
+    """Like probe_kcos but returns a diagnostic dict instead of dict | None.
+
+    Always returns a dict with keys:
+      kcos_detected  bool    — True if KCOS marker found
+      kcos_info      dict|None — same payload as probe_kcos when detected
+      motd_raw       str     — raw MOTD text received (control chars stripped)
+      error          str|None — exception message if SSH failed
+      ssh_connected  bool    — True if TCP+auth succeeded
+    """
+    try:
+        import paramiko
+    except ImportError:
+        return {
+            "kcos_detected": False, "kcos_info": None,
+            "motd_raw": "", "error": "paramiko not installed", "ssh_connected": False,
+        }
+
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    try:
+        client.connect(
+            host, username=username, password=password,
+            timeout=timeout, look_for_keys=False, allow_agent=False,
+        )
+
+        chan = client.invoke_shell(width=220, height=50)
+        chan.settimeout(2.0)
+
+        chunks: list[str] = []
+        deadline = time.monotonic() + motd_wait
+        while time.monotonic() < deadline:
+            if chan.recv_ready():
+                data = chan.recv(4096)
+                if not data:
+                    break
+                chunks.append(data.decode("utf-8", errors="replace"))
+            else:
+                time.sleep(0.1)
+        chan.close()
+
+        text = "".join(chunks)
+        # Strip ANSI escape sequences for readability
+        import re as _re
+        clean = _re.sub(r"\x1b\[[0-9;]*[mABCDEFGHJKSTfhimnprsu]", "", text)
+
+        if _KCOS_MARKER not in text:
+            return {
+                "kcos_detected": False, "kcos_info": None,
+                "motd_raw": clean[:2000], "error": None, "ssh_connected": True,
+            }
+
+        aresone_m = _RE_ARESONE.search(text)
+        nucleon_m = _RE_NUCLEON.search(text)
+        kcos_info = {
+            "kcos_aresone": aresone_m.group(1) if aresone_m else "unknown",
+            "nucleon_kcos": nucleon_m.group(1) if nucleon_m else "unknown",
+        }
+        return {
+            "kcos_detected": True, "kcos_info": kcos_info,
+            "motd_raw": clean[:2000], "error": None, "ssh_connected": True,
+        }
+
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "kcos_detected": False, "kcos_info": None,
+            "motd_raw": "", "error": str(exc), "ssh_connected": False,
+        }
+    finally:
+        try:
+            client.close()
+        except Exception:  # noqa: BLE001
+            pass
