@@ -163,6 +163,41 @@ body[data-theme="day"] .sessions-table thead th { background: var(--surface-alt)
 body[data-theme="day"] .sessions-table tbody tr:hover td { background: var(--surface-hover); }
 body[data-theme="day"] .sessions-table tbody td { border-bottom-color: var(--border); }
 
+/* Table headers — both sessions and server-list */
+body[data-theme="day"] .sessions-table th,
+body[data-theme="day"] .server-list-table th {
+  color: #225792; /* Keysight Dark Blue */
+}
+
+/* Server-list hover row */
+body[data-theme="day"] .server-list-table tbody tr:hover td {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+/* Server-list thead background */
+body[data-theme="day"] .server-list-table thead {
+  background: var(--surface-alt);
+  border-bottom-color: var(--border-med);
+}
+
+/* Deployment chips — KCOS / Standalone / On-Chassis */
+body[data-theme="day"] .server-web-deployment--kcos {
+  color: #07858b;                          /* Keysight Teal */
+  border-color: rgba(7, 133, 139, 0.40);
+  background: rgba(7, 133, 139, 0.08);
+}
+body[data-theme="day"] .server-web-deployment--standalone {
+  color: #225792;                          /* Keysight Dark Blue */
+  border-color: rgba(34, 87, 146, 0.40);
+  background: rgba(34, 87, 146, 0.08);
+}
+body[data-theme="day"] .server-web-deployment--on-chassis {
+  color: #D4870A;                          /* Keysight Amber (already in --amber) */
+  border-color: rgba(212, 135, 10, 0.40);
+  background: rgba(212, 135, 10, 0.08);
+}
+
 /* Toast — Keysight Teal (#07858b) for success, Dark Red (#871518) for error */
 body[data-theme="day"] {
   --toast-ok-text:    #07858b;
