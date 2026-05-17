@@ -1,5 +1,19 @@
 # IxNetwork Session Explorer (IxNSE)
 
+## App Preview
+
+**Day mode**
+![Day mode — main dashboard](docs/screenshots/day-mode.png)
+
+**Night mode**
+![Night mode — main dashboard](docs/screenshots/night-mode.png)
+
+**Manage Servers**
+![Manage Servers modal](docs/screenshots/manage-servers.png)
+
+---
+
+
 Dashboard for lab admins to track IxNetwork sessions across multiple chassis. Shows which sessions are actively using resources (control plane + data plane). No config file — servers managed via UI, settings persisted in SQLite.
 
 ---
