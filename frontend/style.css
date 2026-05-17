@@ -64,6 +64,184 @@
   --ease-spring:     250ms cubic-bezier(0.34, 1.3, 0.64, 1);
 }
 
+/* =====================================================================
+   DAY THEME — Keysight Brand Palette
+   Activated via: body[data-theme="day"]
+   Palette:
+     Keysight Red    #E90029   → primary interactive (replaces --cyan)
+     Keysight Gray   #524F56   → muted text
+     Keysight Purple #291B44   → header (pinned, both modes)
+     Keysight Yellow #FFA623   → warnings (maps to --amber)
+   ===================================================================== */
+body[data-theme="day"] {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg:              #F4F2F7;
+  --surface:         #FFFFFF;
+  --surface-alt:     #EDE9F4;
+  --surface-raised:  #E4E0EE;
+  --surface-hover:   #E9E5F2;
+
+  /* Borders */
+  --border:          #D5D0E0;
+  --border-med:      #BDB8CC;
+  --border-bright:   #9A94AD;
+  --border-focus:    rgba(233, 0, 41, 0.50);
+
+  /* Text */
+  --text:            #1A1528;
+  --text-muted:      #524F56;
+  --text-dim:        #7B768A;
+  --text-xdim:       #C0BBCC;
+
+  /* Primary interactive — Keysight Red */
+  --cyan:            #E90029;
+  --cyan-dim:        rgba(233, 0, 41, 0.08);
+  --cyan-glow:       rgba(233, 0, 41, 0.18);
+  --cyan-hover:      #FF1A3D;
+
+  /* Status */
+  --green:           #00875A;
+  --green-dim:       rgba(0, 135, 90, 0.10);
+  --green-border:    rgba(0, 135, 90, 0.28);
+  --amber:           #D4870A;
+  --amber-dim:       rgba(212, 135, 10, 0.10);
+  --amber-border:    rgba(212, 135, 10, 0.32);
+  --crimson:         #B5001F;
+  --crimson-dim:     rgba(181, 0, 31, 0.08);
+  --crimson-hover:   #D4002A;
+}
+
+/* Day mode body background — clean light with subtle warm-purple tint */
+body[data-theme="day"] {
+  background-image:
+    radial-gradient(ellipse 80% 40% at 10% -10%, rgba(41, 27, 68, 0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 90% 110%, rgba(233, 0, 41, 0.03) 0%, transparent 60%);
+}
+
+/* Header pinned dark — Keysight Dark Purple in both themes */
+body[data-theme="day"] header {
+  background: #291B44;
+  border-bottom-color: #3d2860;
+}
+
+/* Header text stays light on dark purple */
+body[data-theme="day"] header .header-title-group h1,
+body[data-theme="day"] header .header-sub,
+body[data-theme="day"] header .logo-ix,
+body[data-theme="day"] header .logo-se {
+  color: inherit;
+}
+body[data-theme="day"] header .logo-ix { color: #E90029; }
+body[data-theme="day"] header .logo-se { color: rgba(255,255,255,0.55); }
+body[data-theme="day"] header .header-title-group h1 { color: rgba(255,255,255,0.90); }
+body[data-theme="day"] header .header-sub { color: rgba(255,255,255,0.40); }
+body[data-theme="day"] header .header-divider { background: rgba(255,255,255,0.15); }
+
+/* Header buttons on dark purple */
+body[data-theme="day"] header .btn { color: rgba(255,255,255,0.80); border-color: rgba(255,255,255,0.18); background: rgba(255,255,255,0.06); }
+body[data-theme="day"] header .btn:hover:not(:disabled) { color: #fff; background: rgba(255,255,255,0.12); border-color: rgba(255,255,255,0.30); }
+body[data-theme="day"] header .btn--active { color: #E90029 !important; border-color: rgba(233,0,41,0.50) !important; background: rgba(233,0,41,0.12) !important; }
+
+/* Live badge on dark purple */
+body[data-theme="day"] .live-badge { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+body[data-theme="day"] .live-text { color: rgba(255,255,255,0.55); }
+
+/* Stats bar */
+body[data-theme="day"] #stats-bar { background: var(--surface); border-bottom-color: var(--border); }
+body[data-theme="day"] .stat-value { color: var(--text); }
+body[data-theme="day"] .stat-label { color: var(--text-muted); }
+body[data-theme="day"] .stat-divider { background: var(--border-med); }
+
+/* Tables */
+body[data-theme="day"] .sessions-table thead th { background: var(--surface-alt); color: var(--text-muted); border-bottom-color: var(--border-med); }
+body[data-theme="day"] .sessions-table tbody tr:hover td { background: var(--surface-hover); }
+body[data-theme="day"] .sessions-table tbody td { border-bottom-color: var(--border); }
+
+/* ----- Theme Slider widget ------------------------------------------ */
+.theme-slider {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.theme-slider__input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.theme-slider__track {
+  position: relative;
+  width: 46px;
+  height: 24px;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  transition: background var(--ease-med), border-color var(--ease-med);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.theme-slider__thumb {
+  position: absolute;
+  left: 3px;
+  width: 18px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.75);
+  border-radius: 50%;
+  transition: left var(--ease-spring), background var(--ease-med);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.4);
+  z-index: 1;
+}
+
+.theme-slider__input:checked ~ .theme-slider__track {
+  background: #E90029;
+  border-color: #C8001F;
+}
+
+.theme-slider__input:checked ~ .theme-slider__track .theme-slider__thumb {
+  left: 25px;
+  background: #fff;
+}
+
+.theme-slider__icon {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.60);
+  transition: opacity var(--ease-med);
+}
+
+.theme-slider__icon--night { right: 5px; }
+.theme-slider__icon--day   { left: 5px; opacity: 0; }
+
+.theme-slider__input:checked ~ .theme-slider__track .theme-slider__icon--night { opacity: 0; }
+.theme-slider__input:checked ~ .theme-slider__track .theme-slider__icon--day   { opacity: 1; color: rgba(255,255,255,0.85); }
+
+.theme-slider__label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.55);
+  font-family: var(--font-mono);
+  transition: color var(--ease);
+}
+
+.theme-slider__input:checked ~ * + .theme-slider__label,
+.theme-slider:has(.theme-slider__input:checked) .theme-slider__label {
+  color: rgba(255, 255, 255, 0.85);
+}
+
 /* ----- Accessibility ------------------------------------------------- */
 .sr-only {
   position: absolute;
@@ -1456,6 +1634,28 @@ header::before {
 }
 .import-preview-table { margin-top: 0; max-height: 180px; overflow-y: auto; display: block; }
 .import-preview-table thead { position: sticky; top: 0; }
+
+/* ----- Header logo — home nav when tutorial is active --------------- */
+#header-home {
+  cursor: default;
+  border-radius: var(--radius);
+  transition: background var(--ease), box-shadow var(--ease);
+  padding: 4px 8px;
+  margin: -4px -8px;
+}
+#header-home.header-home--active {
+  cursor: pointer;
+}
+#header-home.header-home--active:hover {
+  background: var(--cyan-dim);
+  box-shadow: 0 0 0 1px var(--cyan-glow);
+}
+#header-home.header-home--active:hover .header-title-group h1 {
+  color: var(--cyan);
+}
+#header-home.header-home--active:hover .header-sub::before {
+  content: "← ";
+}
 
 /* ----- Tutorial header button active state -------------------------- */
 .btn--active {

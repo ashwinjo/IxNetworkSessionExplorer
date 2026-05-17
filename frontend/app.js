@@ -1603,40 +1603,57 @@ async function saveServerForm() {
 }
 
 /**
- * testServerConnection — POST /servers/{name}/test and show result inline.
+ * testServerConnection — test credentials before or after saving.
+ *   add mode  → POST /servers/probe  with form fields (no DB required)
+ *   edit mode → POST /servers/{name}/test  (uses saved credentials)
  */
 async function testServerConnection() {
   const mode     = document.getElementById("server-form-mode").value;
   const origName = document.getElementById("server-form-original-name").value;
-  const name     = mode === "add"
-    ? document.getElementById("sf-name").value.trim()
-    : origName;
 
   const errEl = document.getElementById("modal-server-form-error");
   errEl.textContent = "";
   errEl.style.display = "none";
-
-  if (mode === "add") {
-    errEl.textContent = "Save the server first, then test the connection.";
-    errEl.style.display = "block";
-    return;
-  }
-
-  if (!name) {
-    errEl.textContent = "No server name available to test.";
-    errEl.style.display = "block";
-    return;
-  }
 
   const testBtn = document.getElementById("btn-server-form-test");
   testBtn.disabled = true;
   testBtn.textContent = "Testing…";
 
   try {
-    const resp = await fetch(`${API_BASE_URL}/servers/${encodeURIComponent(name)}/test`, {
-      method: "POST",
-      headers: { "Accept": "application/json" },
-    });
+    let resp;
+
+    if (mode === "add") {
+      // Test before saving — read credentials directly from the form
+      const host     = document.getElementById("sf-host").value.trim();
+      const username = document.getElementById("sf-username").value.trim();
+      const password = document.getElementById("sf-password").value;
+      const portRaw  = document.getElementById("sf-port").value.trim();
+      const restPort = portRaw ? parseInt(portRaw, 10) : 443;
+
+      if (!host) {
+        errEl.textContent = "Enter a host / IP before testing.";
+        errEl.style.display = "block";
+        return;
+      }
+
+      resp = await fetch(`${API_BASE_URL}/servers/probe`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({ host, username, password, rest_port: restPort }),
+      });
+    } else {
+      // Edit mode — server already in DB
+      if (!origName) {
+        errEl.textContent = "No server name available to test.";
+        errEl.style.display = "block";
+        return;
+      }
+      resp = await fetch(`${API_BASE_URL}/servers/${encodeURIComponent(origName)}/test`, {
+        method: "POST",
+        headers: { "Accept": "application/json" },
+      });
+    }
+
     const data = await resp.json();
     if (data.status === "ok") {
       showToast(data.message, "ok");
@@ -2022,14 +2039,67 @@ document.getElementById("poller-interval-input").addEventListener("keydown", e =
 // ---------------------------------------------------------------------------
 (function initTutorialToggle() {
   const btnTutorial   = document.getElementById("tab-tutorial");
+  const headerHome    = document.getElementById("header-home");
   const panelSessions = document.getElementById("panel-sessions");
   const panelTutorial = document.getElementById("panel-tutorial");
 
+  const ICON_TUTORIAL = `<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="8" r="6.5"/><path d="M8 7v5"/><circle cx="8" cy="5" r=".6" fill="currentColor" stroke="none"/></svg>`;
+  const ICON_HOME     = `<svg class="btn-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 7l6-5 6 5v7a1 1 0 01-1 1H3a1 1 0 01-1-1z"/><path d="M6 15V9h4v6"/></svg>`;
+
+  function openTutorial() {
+    panelTutorial.hidden = false;
+    panelSessions.hidden = true;
+    btnTutorial.innerHTML = ICON_HOME + " Dashboard";
+    btnTutorial.classList.add("btn--active");
+    headerHome.classList.add("header-home--active");
+  }
+
+  function closeTutorial() {
+    panelTutorial.hidden = true;
+    panelSessions.hidden = false;
+    btnTutorial.innerHTML = ICON_TUTORIAL + " Tutorial";
+    btnTutorial.classList.remove("btn--active");
+    headerHome.classList.remove("header-home--active");
+  }
+
   btnTutorial.addEventListener("click", () => {
-    const isOpen = !panelTutorial.hidden;
-    panelTutorial.hidden = isOpen;
-    panelSessions.hidden = !isOpen;
-    btnTutorial.classList.toggle("btn--active", !isOpen);
+    if (!panelTutorial.hidden) closeTutorial();
+    else openTutorial();
+  });
+
+  // Logo / title click → always returns to dashboard
+  headerHome.addEventListener("click", () => {
+    if (!panelTutorial.hidden) closeTutorial();
+  });
+  headerHome.addEventListener("keydown", (e) => {
+    if ((e.key === "Enter" || e.key === " ") && !panelTutorial.hidden) {
+      e.preventDefault();
+      closeTutorial();
+    }
+  });
+})();
+
+// ---------------------------------------------------------------------------
+// Day / Night Theme Toggle
+// ---------------------------------------------------------------------------
+(function initThemeToggle() {
+  const toggle = document.getElementById("theme-day-toggle");
+  if (!toggle) return;
+
+  const STORAGE_KEY = "ixse-theme";
+
+  function applyTheme(day) {
+    document.body.dataset.theme = day ? "day" : "night";
+    toggle.checked = day;
+  }
+
+  // Restore saved preference
+  applyTheme(localStorage.getItem(STORAGE_KEY) === "day");
+
+  toggle.addEventListener("change", () => {
+    const day = toggle.checked;
+    applyTheme(day);
+    localStorage.setItem(STORAGE_KEY, day ? "day" : "night");
   });
 })();
 

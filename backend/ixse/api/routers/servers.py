@@ -4,10 +4,11 @@ Servers endpoints: CRUD + bulk operations for IxNetwork server configurations.
 Single:
   GET    /servers              — list all servers (password masked)
   POST   /servers              — add a new server
+  POST   /servers/probe        — test credentials without saving (pre-save connectivity check)
   PUT    /servers/{name}       — update an existing server
   PATCH  /servers/{name}/tags  — add/remove tags on a server
   DELETE /servers/{name}       — remove a server
-  POST   /servers/{name}/test  — test connectivity to a server
+  POST   /servers/{name}/test  — test connectivity to a saved server
 
 Bulk:
   POST   /servers/bulk           — upsert a list of servers (add new, update existing)
@@ -317,6 +318,39 @@ async def delete_server(name: str, request: Request) -> dict:
     if not deleted:
         raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
     return {"status": "ok", "message": f"Server '{name}' deleted.", "timestamp": _now_iso()}
+
+
+class ProbeRequest(BaseModel):
+    host: str = Field(..., description="Hostname or IP of the IxNetwork server")
+    username: str = Field(..., description="Login username")
+    password: str = Field(..., description="Login password")
+    rest_port: int = Field(443, description="REST API port")
+
+
+@router.post("/probe", summary="Test connectivity using supplied credentials (no DB required)")
+async def probe_server(body: ProbeRequest) -> dict:
+    """Attempt a quick RestPy connect/disconnect with caller-supplied credentials.
+
+    Useful for validating a new server's credentials before saving to the database.
+    """
+    from ixse.client import RestPyClient
+
+    client = RestPyClient(body.host, body.username, body.password, body.rest_port)
+    try:
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(None, client.connect)
+        await loop.run_in_executor(None, client.disconnect)
+        return {
+            "status": "ok",
+            "message": f"Successfully connected to {body.host}:{body.rest_port}",
+            "timestamp": _now_iso(),
+        }
+    except Exception as exc:  # noqa: BLE001
+        return {
+            "status": "error",
+            "message": str(exc),
+            "timestamp": _now_iso(),
+        }
 
 
 @router.post("/{name}/test", summary="Test connectivity to an IxNetwork server")
