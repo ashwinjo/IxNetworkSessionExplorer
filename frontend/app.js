@@ -494,7 +494,7 @@ function buildSessionTable(sessions, serverName) {
         <tr>
           <th class="col-session">SESSION</th>
           <th class="col-chassis">CHASSIS</th>
-          <th class="col-port">PORT</th>
+          <th class="col-port">CONNECTED PORTS</th>
           <th class="col-cp">CP</th>
           <th class="col-dp">DP</th>
           <th class="col-utilized">UTILIZED</th>
@@ -641,9 +641,12 @@ function renderSessionRows(session) {
   const sid    = escapeHtml(String(session.id));
   const server = escapeHtml(session.ixnet_server ?? "");
 
-  const ports = Array.isArray(session.ports) && session.ports.length > 0
-    ? session.ports
-    : [null];  // sentinel: one row with "—"
+  const connectedPorts = Array.isArray(session.ports)
+    ? session.ports.filter(p => p.fully_qualified_port_name)
+    : [];
+  const ports = connectedPorts.length > 0
+    ? connectedPorts
+    : [null];  // sentinel: session exists but no physically connected ports
 
   const rowspan = ports.length > 1 ? ` rowspan="${ports.length}"` : "";
 
