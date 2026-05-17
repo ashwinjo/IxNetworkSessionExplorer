@@ -36,7 +36,7 @@ import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from ixse.models import ServerEntry, Session, SessionPort
+from ixse.models import KcosInfo, ServerEntry, Session, SessionPort
 
 
 # ---------------------------------------------------------------------------
@@ -194,6 +194,7 @@ class FleetState:
             "ALTER TABLE sessions  ADD COLUMN error_status  TEXT    NOT NULL DEFAULT 'NOERROR'",
             "ALTER TABLE sessions  ADD COLUMN error_count   INTEGER NOT NULL DEFAULT 0",
             "ALTER TABLE sessions  ADD COLUMN error_list    TEXT    NOT NULL DEFAULT '[]'",
+            "ALTER TABLE servers   ADD COLUMN kcos_info     TEXT",
         ]
         for sql in migrations:
             try:
@@ -394,31 +395,9 @@ class FleetState:
     # Server CRUD
     # ------------------------------------------------------------------
 
-    def list_servers(self) -> list[ServerEntry]:
-        """Return all configured IxNetwork servers."""
-        cursor = self._conn.execute(
-            "SELECT name, host, username, password, rest_port, tags FROM servers ORDER BY name"
-        )
-        return [
-            ServerEntry(
-                name=row["name"],
-                host=row["host"],
-                username=row["username"],
-                password=row["password"],
-                rest_port=row["rest_port"],
-                tags=_json_to_tags(row["tags"]),
-            )
-            for row in cursor.fetchall()
-        ]
-
-    def get_server(self, name: str) -> ServerEntry | None:
-        """Return a single server by name, or None if not found."""
-        row = self._conn.execute(
-            "SELECT name, host, username, password, rest_port, tags FROM servers WHERE name = ?",
-            (name,),
-        ).fetchone()
-        if row is None:
-            return None
+    def _row_to_server(self, row: sqlite3.Row) -> ServerEntry:
+        kcos_raw = row["kcos_info"] if "kcos_info" in row.keys() else None
+        kcos_info = KcosInfo(**json.loads(kcos_raw)) if kcos_raw else None
         return ServerEntry(
             name=row["name"],
             host=row["host"],
@@ -426,7 +405,27 @@ class FleetState:
             password=row["password"],
             rest_port=row["rest_port"],
             tags=_json_to_tags(row["tags"]),
+            kcos_info=kcos_info,
         )
+
+    def list_servers(self) -> list[ServerEntry]:
+        """Return all configured IxNetwork servers."""
+        cursor = self._conn.execute(
+            "SELECT name, host, username, password, rest_port, tags, kcos_info"
+            " FROM servers ORDER BY name"
+        )
+        return [self._row_to_server(row) for row in cursor.fetchall()]
+
+    def get_server(self, name: str) -> ServerEntry | None:
+        """Return a single server by name, or None if not found."""
+        row = self._conn.execute(
+            "SELECT name, host, username, password, rest_port, tags, kcos_info"
+            " FROM servers WHERE name = ?",
+            (name,),
+        ).fetchone()
+        if row is None:
+            return None
+        return self._row_to_server(row)
 
     def upsert_server(self, server: ServerEntry) -> None:
         """Insert or replace a server entry. Thread-safe."""
@@ -464,6 +463,16 @@ class FleetState:
                     del self._cache[k]
             self._conn.commit()
             return deleted
+
+    def update_kcos_info(self, name: str, kcos_info: KcosInfo | None) -> None:
+        """Persist KCOS SSH probe result for *name*. Thread-safe."""
+        val = kcos_info.model_dump_json() if kcos_info else None
+        with self._lock:
+            self._conn.execute(
+                "UPDATE servers SET kcos_info = ?, updated_at = datetime('now') WHERE name = ?",
+                (val, name),
+            )
+            self._conn.commit()
 
     def bulk_upsert_servers(self, servers: list[ServerEntry]) -> list[dict]:
         """Insert-or-replace each server. Returns one result dict per entry.

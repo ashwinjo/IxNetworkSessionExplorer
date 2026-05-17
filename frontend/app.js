@@ -209,7 +209,8 @@ async function triggerRefresh() {
  * @param {string|undefined|null} checkedAt  ixnetwork_web_checked_at ISO string
  * @returns {string}
  */
-function formatIxWebDeployment(d, h, checkedAt) {
+function formatIxWebDeployment(d, h, checkedAt, kcosInfo) {
+  if (kcosInfo)           return "KCOS";
   if (d === "standalone") return "Standalone";
   if (d === "onChassis")  return "On Chassis";
   if (h === "red")        return "Unreachable";
@@ -226,7 +227,8 @@ function formatIxWebDeployment(d, h, checkedAt) {
  * @param {string|undefined|null} checkedAt  ixnetwork_web_checked_at
  * @returns {string}
  */
-function ixWebDeploymentClass(d, h, checkedAt) {
+function ixWebDeploymentClass(d, h, checkedAt, kcosInfo) {
+  if (kcosInfo)           return "server-web-deployment server-web-deployment--kcos";
   if (d === "standalone") return "server-web-deployment server-web-deployment--standalone";
   if (d === "onChassis")  return "server-web-deployment server-web-deployment--on-chassis";
   if (h === "red")        return "server-web-deployment server-web-deployment--unreachable";
@@ -368,17 +370,20 @@ function buildServerBlock(server) {
   const dep       = server.ixnetwork_web_deployment ?? null;
   const checkedAt = server.ixnetwork_web_checked_at ?? null;
   const ixVersion = server.ixnetwork_version ?? null;
+  const kcosInfo  = server.kcos_info ?? null;
   const hbTitle   = escapeHtml(ixWebHeartbeatTitle(server));
-  const depLabel  = escapeHtml(formatIxWebDeployment(dep, hb, checkedAt));
-  const depTitle  = dep === "standalone"
-    ? "Standalone VM — IxNetwork Web on dedicated server"
-    : dep === "onChassis"
-      ? "On-Chassis — IxNetwork Web embedded in chassis"
-      : hb === "red"
-        ? "Unreachable — HTTPS auth probe failed on both paths"
-        : checkedAt
-          ? "Auth Failed — probe ran but no API key returned (check credentials / password)"
-          : "Not yet probed — click Refresh to run the heartbeat probe";
+  const depLabel  = escapeHtml(formatIxWebDeployment(dep, hb, checkedAt, kcosInfo));
+  const depTitle  = kcosInfo
+    ? `KCOS platform\nkcos-aresone:  ${kcosInfo.kcos_aresone}\nnucleon-kcos:  ${kcosInfo.nucleon_kcos}`
+    : dep === "standalone"
+      ? "Standalone VM — IxNetwork Web on dedicated server"
+      : dep === "onChassis"
+        ? "On-Chassis — IxNetwork Web embedded in chassis"
+        : hb === "red"
+          ? "Unreachable — HTTPS auth probe failed on both paths"
+          : checkedAt
+            ? "Auth Failed — probe ran but no API key returned (check credentials / password)"
+            : "Not yet probed — click Refresh to run the heartbeat probe";
   const versionHtml = ixVersion
     ? `<span class="server-ixn-version" title="IxNetwork (ixnrest) version">v${escapeHtml(ixVersion)}</span>`
     : "";
@@ -400,7 +405,7 @@ function buildServerBlock(server) {
       <span class="server-name">${escapeHtml(server.name)}</span>
       <span class="server-host">(${escapeHtml(server.host)})</span>
       ${pollErrorHtml}
-      <span class="${ixWebDeploymentClass(dep, hb, checkedAt)}"
+      <span class="${ixWebDeploymentClass(dep, hb, checkedAt, kcosInfo)}"
             title="${escapeHtml(depTitle)}">${depLabel}</span>
       ${versionHtml}
       <span class="server-session-count">${sessionCount} session${sessionCount !== 1 ? "s" : ""}</span>
@@ -522,12 +527,14 @@ function buildPortCell(p) {
 /**
  * buildDetailsRowHtml — render the inline LLDP details sub-row for a session.
  *
- * Always visible (no toggle required).  Spans all 7 columns of the main table.
+ * Hidden by default; revealed when the LLDP checkbox in the session cell is checked.
  *
  * @param {Object} session — session object with ports array
+ * @param {string} sid    — escaped session id (used for data-attr matching)
+ * @param {string} server — escaped server name (used for data-attr matching)
  * @returns {string} HTML string (<tr class="details-row">)
  */
-function buildDetailsRowHtml(session) {
+function buildDetailsRowHtml(session, sid, server) {
   const MAIN_COL_COUNT = 7;
   const owner = escapeHtml(session.username || session.name || "—");
   const ports = Array.isArray(session.ports) ? session.ports : [];
@@ -555,7 +562,7 @@ function buildDetailsRowHtml(session) {
     : `<tr><td colspan="7" class="details-empty">No ports assigned</td></tr>`;
 
   return `
-    <tr class="details-row">
+    <tr class="details-row" hidden data-session-id="${sid}" data-server="${server}">
       <td colspan="${MAIN_COL_COUNT}" class="details-cell">
         <table class="details-table details-table--lldp">
           <thead>
@@ -630,6 +637,12 @@ function renderSessionRows(session) {
       <span class="session-name">${escapeHtml(session.name)}</span>
       ${stateHtml}
       ${tagsHtml}
+      <label class="lldp-toggle-label">
+        <input type="checkbox" class="lldp-checkbox"
+               data-session-id="${sid}"
+               data-server="${server}"
+               aria-label="Show LLDP neighbor details"> LLDP
+      </label>
     </td>`;
 
   const actionsCells = `
@@ -685,7 +698,7 @@ function renderSessionRows(session) {
           <td class="col-port port-cell">${portLabel}</td>
           ${portStatusCells}
           ${actionsCells}
-        </tr>${isLast ? buildDetailsRowHtml(session) : ""}`;
+        </tr>${isLast ? buildDetailsRowHtml(session, sid, server) : ""}`;
     }
     return `
       <tr class="session-port-row" data-session-id="${sid}" data-server="${server}">

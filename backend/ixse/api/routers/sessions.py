@@ -127,6 +127,9 @@ async def list_sessions(
 
     db_list: list[ServerEntry] = fleet.list_servers()
     host_by_name: dict[str, str] = {e.name: e.host for e in db_list}
+    kcos_by_name: dict[str, dict | None] = {
+        e.name: e.kcos_info.model_dump() if e.kcos_info else None for e in db_list
+    }
 
     if server is not None:
         server_names_ordered = [server]
@@ -150,6 +153,7 @@ async def list_sessions(
             "sessions": [_session_dict(s) for s in slist],
             "session_count": len(slist),
             "poll_error": poll_errors.get(name),  # None when last poll succeeded
+            "kcos_info": kcos_by_name.get(name),
         }
         row.update(_ixnetwork_web_panel_from_state(web_by.get(name)))
         servers_payload.append(row)

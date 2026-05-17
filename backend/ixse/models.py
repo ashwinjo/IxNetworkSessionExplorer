@@ -208,6 +208,13 @@ class PollStatus(BaseModel):
     is_polling: bool = Field(default=False, description="True while a poll cycle is in progress")
 
 
+class KcosInfo(BaseModel):
+    """Version strings extracted from the KCOS SSH welcome banner."""
+
+    kcos_aresone: str = Field(..., description="kcos-aresone version (e.g. '1.2.156')")
+    nucleon_kcos: str = Field(..., description="nucleon-kcos version (e.g. '2.14.2-49')")
+
+
 class ServerEntry(BaseModel):
     """IxNetwork server connection parameters stored in the DB."""
 
@@ -217,6 +224,9 @@ class ServerEntry(BaseModel):
     password: str = Field(default="", description="Login password (stored as-is; lab use only)")
     rest_port: int | None = Field(default=None, description="REST port (None = RestPy auto-detect)")
     tags: list[str] = Field(default_factory=list, description="Operator-assigned labels")
+    kcos_info: KcosInfo | None = Field(
+        default=None, description="KCOS platform versions detected via SSH probe; None if not KCOS"
+    )
 
 
 class ServerEntryPublic(BaseModel):
@@ -227,6 +237,7 @@ class ServerEntryPublic(BaseModel):
     username: str
     rest_port: int | None = None
     tags: list[str] = Field(default_factory=list)
+    kcos_info: KcosInfo | None = None
 
 
 class PollConfig(BaseModel):

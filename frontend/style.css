@@ -795,6 +795,7 @@ header::before {
 .server-web-deployment--unknown     { color: var(--text-dim);    border-color: var(--border-med);         background: rgba(74, 102, 128, 0.06); }
 .server-web-deployment--unreachable { color: #ff6680;            border-color: rgba(244, 63, 94, 0.35);  background: rgba(244, 63, 94, 0.06); }
 .server-web-deployment--auth-failed { color: #ffab40;            border-color: rgba(255, 171, 64, 0.40); background: rgba(255, 171, 64, 0.06); }
+.server-web-deployment--kcos        { color: #7dd3a8;            border-color: rgba(125, 211, 168, 0.45); background: rgba(125, 211, 168, 0.08); }
 
 .server-poll-error {
   display: inline-flex;

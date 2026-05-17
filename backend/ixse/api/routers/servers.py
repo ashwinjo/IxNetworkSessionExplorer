@@ -17,13 +17,14 @@ Bulk:
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ixse.api.state import StateError
-from ixse.models import ServerEntry, ServerEntryPublic
+from ixse.api.state import FleetState, StateError
+from ixse.models import KcosInfo, ServerEntry, ServerEntryPublic
 
 router = APIRouter(prefix="/servers", tags=["servers"])
 
@@ -39,7 +40,19 @@ def _public(entry: ServerEntry) -> dict:
         username=entry.username,
         rest_port=entry.rest_port,
         tags=entry.tags,
+        kcos_info=entry.kcos_info,
     ).model_dump()
+
+
+async def _run_kcos_probe(fleet: FleetState, entry: ServerEntry) -> None:
+    """Run the KCOS SSH probe in a thread and persist the result."""
+    from ixse.kcos import probe_kcos
+
+    loop = asyncio.get_event_loop()
+    result = await loop.run_in_executor(
+        None, probe_kcos, entry.host, entry.username, entry.password
+    )
+    fleet.update_kcos_info(entry.name, KcosInfo(**result) if result else None)
 
 
 # ---------------------------------------------------------------------------
@@ -214,6 +227,9 @@ async def create_server(body: ServerCreateRequest, request: Request) -> dict:
     )
     fleet.upsert_server(entry)
 
+    # Fire KCOS SSH probe in the background — result persisted when complete.
+    asyncio.create_task(_run_kcos_probe(fleet, entry))
+
     return {
         "status": "ok",
         "data": _public(entry),
@@ -299,6 +315,22 @@ async def test_server(name: str, request: Request) -> dict:
             "message": str(exc),
             "timestamp": _now_iso(),
         }
+
+
+@router.post("/{name}/probe-kcos", summary="Re-run KCOS SSH detection probe")
+async def probe_server_kcos(name: str, request: Request) -> dict:
+    """Trigger the KCOS SSH banner probe for an existing server.
+
+    Runs in the background — the response returns immediately.  The UI will
+    reflect the updated kcos_info on the next poll/refresh cycle.
+    """
+    fleet: FleetState = request.app.state.fleet
+    entry = fleet.get_server(name)
+    if entry is None:
+        raise HTTPException(status_code=404, detail=f"Server '{name}' not found")
+
+    asyncio.create_task(_run_kcos_probe(fleet, entry))
+    return {"status": "ok", "message": "KCOS probe scheduled", "timestamp": _now_iso()}
 
 
 @router.post("/{name}/probe-web", summary="Debug IxNetwork Web HTTPS auth probe")
