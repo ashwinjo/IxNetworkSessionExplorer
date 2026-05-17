@@ -41,8 +41,7 @@ from ixse.api.state import FleetState
 from ixse.client import RestPyClient, fetch_lldp_map, fetch_session_errors
 from ixse.config import IxNetServerConfig
 from ixse.ixn_web import check_ixnetwork_web
-from ixse.kcos import probe_kcos
-from ixse.models import KcosInfo, LldpPeerInfo, PollConfig, PollStatus, ServerEntry, Session, SessionPort
+from ixse.models import LldpPeerInfo, PollConfig, PollStatus, ServerEntry, Session, SessionPort
 from ixse.plane import detect_cp_per_vport
 
 logger = logging.getLogger(__name__)
@@ -261,17 +260,6 @@ async def _run_poll_cycle(app: FastAPI) -> None:
                     "detail": str(exc),
                     "checked_at": now.isoformat(),
                 }
-
-            try:
-                kcos_result = await loop.run_in_executor(
-                    None, probe_kcos, server_cfg.host, server_cfg.username, server_cfg.password
-                )
-                app.state.fleet.update_kcos_info(
-                    server_cfg.host,
-                    KcosInfo(**kcos_result) if kcos_result else None,
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("KCOS probe error for server '%s': %s", server_cfg.name, exc)
 
             try:
                 polled = await loop.run_in_executor(
