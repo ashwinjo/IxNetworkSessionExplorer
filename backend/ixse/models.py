@@ -48,6 +48,10 @@ class SessionPort(BaseModel):
 
     # Enriched from Vport.find()
     vport_name: str = Field(default="", description="Logical vport name (Vport.Name)")
+    fully_qualified_port_name: str = Field(
+        default="",
+        description="Chassis physical port label from Vport.FullyQualifiedPortName (e.g. '2.1')",
+    )
     connection_state: str = Field(
         default="",
         description=(
