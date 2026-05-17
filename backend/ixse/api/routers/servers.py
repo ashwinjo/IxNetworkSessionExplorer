@@ -52,7 +52,7 @@ async def _run_kcos_probe(fleet: FleetState, entry: ServerEntry) -> None:
     result = await loop.run_in_executor(
         None, probe_kcos, entry.host, entry.username, entry.password
     )
-    fleet.update_kcos_info(entry.name, KcosInfo(**result) if result else None)
+    fleet.update_kcos_info(entry.host, KcosInfo(**result) if result else None)
 
 
 # ---------------------------------------------------------------------------

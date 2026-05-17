@@ -89,6 +89,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_server      ON sessions(ixnet_server);
 CREATE INDEX IF NOT EXISTS idx_last_polled ON sessions(last_polled_at);
+
+CREATE TABLE IF NOT EXISTS kcos_cache (
+    host      TEXT PRIMARY KEY,
+    kcos_info TEXT NOT NULL,
+    probed_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -396,6 +402,7 @@ class FleetState:
     # ------------------------------------------------------------------
 
     def _row_to_server(self, row: sqlite3.Row) -> ServerEntry:
+        # kcos_info comes from LEFT JOIN kcos_cache k ON s.host = k.host
         kcos_raw = row["kcos_info"] if "kcos_info" in row.keys() else None
         kcos_info = KcosInfo(**json.loads(kcos_raw)) if kcos_raw else None
         return ServerEntry(
@@ -408,19 +415,22 @@ class FleetState:
             kcos_info=kcos_info,
         )
 
+    _SERVER_SELECT = (
+        "SELECT s.name, s.host, s.username, s.password, s.rest_port, s.tags,"
+        "       k.kcos_info"
+        " FROM servers s"
+        " LEFT JOIN kcos_cache k ON s.host = k.host"
+    )
+
     def list_servers(self) -> list[ServerEntry]:
         """Return all configured IxNetwork servers."""
-        cursor = self._conn.execute(
-            "SELECT name, host, username, password, rest_port, tags, kcos_info"
-            " FROM servers ORDER BY name"
-        )
+        cursor = self._conn.execute(self._SERVER_SELECT + " ORDER BY s.name")
         return [self._row_to_server(row) for row in cursor.fetchall()]
 
     def get_server(self, name: str) -> ServerEntry | None:
         """Return a single server by name, or None if not found."""
         row = self._conn.execute(
-            "SELECT name, host, username, password, rest_port, tags, kcos_info"
-            " FROM servers WHERE name = ?",
+            self._SERVER_SELECT + " WHERE s.name = ?",
             (name,),
         ).fetchone()
         if row is None:
@@ -464,14 +474,27 @@ class FleetState:
             self._conn.commit()
             return deleted
 
-    def update_kcos_info(self, name: str, kcos_info: KcosInfo | None) -> None:
-        """Persist KCOS SSH probe result for *name*. Thread-safe."""
-        val = kcos_info.model_dump_json() if kcos_info else None
+    def update_kcos_info(self, host: str, kcos_info: KcosInfo | None) -> None:
+        """Persist KCOS SSH probe result keyed by *host* IP/hostname.
+
+        Keying by host (not server name) means the detection survives server
+        renames and is shared if the same host is registered under multiple names.
+        Passing kcos_info=None removes the cached entry for that host.
+        """
         with self._lock:
-            self._conn.execute(
-                "UPDATE servers SET kcos_info = ?, updated_at = datetime('now') WHERE name = ?",
-                (val, name),
-            )
+            if kcos_info is not None:
+                self._conn.execute(
+                    """
+                    INSERT INTO kcos_cache (host, kcos_info, probed_at)
+                    VALUES (?, ?, datetime('now'))
+                    ON CONFLICT(host) DO UPDATE SET
+                        kcos_info = excluded.kcos_info,
+                        probed_at = excluded.probed_at
+                    """,
+                    (host, kcos_info.model_dump_json()),
+                )
+            else:
+                self._conn.execute("DELETE FROM kcos_cache WHERE host = ?", (host,))
             self._conn.commit()
 
     def bulk_upsert_servers(self, servers: list[ServerEntry]) -> list[dict]:
