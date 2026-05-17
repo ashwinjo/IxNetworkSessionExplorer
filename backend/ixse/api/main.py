@@ -247,6 +247,18 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) 
             state.upsert_session(session)
             polled.append(session)
 
+        # Remove sessions that no longer exist on this server.
+        # Every poll is authoritative — if the server didn't return it, it's gone.
+        live_ids = {str(s.Id) for s in raw_sessions}
+        for cached in state.get_sessions(server=server_cfg.name):
+            if cached.id not in live_ids:
+                logger.info(
+                    "Poller: removing stale session %r from %s (not in live poll)",
+                    cached.id,
+                    server_cfg.name,
+                )
+                state.delete_session(server_cfg.name, cached.id)
+
         return polled
     finally:
         client.disconnect()
