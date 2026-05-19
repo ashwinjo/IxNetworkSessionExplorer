@@ -642,7 +642,7 @@ function renderSessionRows(session) {
   const server = escapeHtml(session.ixnet_server ?? "");
 
   const connectedPorts = Array.isArray(session.ports)
-    ? session.ports.filter(p => p.fully_qualified_port_name)
+    ? session.ports.filter(p => p.chassis_name)
     : [];
   const ports = connectedPorts.length > 0
     ? connectedPorts

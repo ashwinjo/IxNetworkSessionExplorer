@@ -132,12 +132,14 @@ def _parse_vports(
         chassis_name, card, port = parsed
 
         # If Location is "chassis/X.Y" format, use "X.Y" as the display label.
-        # Falls back to FullyQualifiedPortName, then empty (UI renders card/port).
+        # Falls back to FullyQualifiedPortName, then synthesizes from card/port.
         loc_parts = location_str.rsplit("/", 1)
         if len(loc_parts) == 2 and "." in loc_parts[1]:
             port_label = loc_parts[1]  # e.g. "2.2"
+        elif fqpn and fqpn != "N/A":
+            port_label = fqpn
         else:
-            port_label = fqpn if fqpn and fqpn != "N/A" else ""
+            port_label = f"{card}/{port}"  # e.g. "6/3" — always non-empty
 
         # Per-port CP detection via topology → device group status
         vport_href = str(getattr(vp, "href", "") or "")
