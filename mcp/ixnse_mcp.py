@@ -15,6 +15,7 @@ import tempfile
 from contextvars import ContextVar
 from enum import Enum
 from typing import Any, Dict, List, Optional
+from urllib.parse import parse_qs
 
 import httpx
 from mcp.server.fastmcp import FastMCP
@@ -24,7 +25,8 @@ from pydantic import BaseModel, ConfigDict, Field
 # Constants
 # ---------------------------------------------------------------------------
 
-_DEFAULT_BACKEND: str = os.environ.get("IXNSE_API_URL", "http://localhost:8080").rstrip("/")
+# Mutable container so main() can update the startup default without `global` mutation of a str.
+_backend_config: list[str] = [os.environ.get("IXNSE_API_URL", "http://localhost:8080").rstrip("/")]
 _backend_url: ContextVar[str] = ContextVar("backend_url")
 CHARACTER_LIMIT = 25_000
 DEFAULT_TIMEOUT = 30.0
@@ -43,7 +45,7 @@ async def health(request: Any) -> Any:
         "service": "ixnse-mcp",
         "status": "ok",
         "mcp_endpoint": "/mcp",
-        "default_backend": _DEFAULT_BACKEND,
+        "default_backend": _backend_config[0],
         "backend_override": "append ?backend=<url> to /mcp URL to override per-session",
     })
 
@@ -60,7 +62,6 @@ class BackendURLMiddleware:
 
     async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
         if scope["type"] in ("http", "websocket"):
-            from urllib.parse import parse_qs
             query_string = scope.get("query_string", b"")
             params = parse_qs(query_string.decode())
             backend_values = params.get("backend", [])
@@ -95,7 +96,7 @@ async def _api(
     timeout: float = DEFAULT_TIMEOUT,
 ) -> Any:
     """Single entry-point for all IxNSE API calls."""
-    url = f"{_backend_url.get(_DEFAULT_BACKEND)}{path}"
+    url = f"{_backend_url.get(_backend_config[0])}{path}"
     async with httpx.AsyncClient() as client:
         response = await client.request(
             method,
@@ -129,7 +130,7 @@ def _err(e: Exception) -> str:
         return "Error: Request timed out. The IxNSE server may be slow or unreachable."
     if isinstance(e, httpx.ConnectError):
         return (
-            f"Error: Cannot connect to IxNSE at {_backend_url.get(_DEFAULT_BACKEND)}. "
+            f"Error: Cannot connect to IxNSE at {_backend_url.get(_backend_config[0])}. "
             "Check IXNSE_API_URL and ensure the server is running."
         )
     return f"Error: {type(e).__name__}: {e}"
@@ -1318,8 +1319,7 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.api_url:
-        global _DEFAULT_BACKEND
-        _DEFAULT_BACKEND = args.api_url.rstrip("/")
+        _backend_config[0] = args.api_url.rstrip("/")
 
     app = mcp.streamable_http_app()
     app.add_middleware(BackendURLMiddleware)

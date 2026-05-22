@@ -1,9 +1,4 @@
 """Tests for BackendURLMiddleware and ContextVar backend resolution."""
-import sys
-import os
-
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
 import ixnse_mcp as sut
 from starlette.applications import Starlette
 from starlette.routing import Route
@@ -15,7 +10,7 @@ def _make_test_app() -> Starlette:
     """Minimal Starlette app that echoes which backend ContextVar resolves to."""
 
     async def echo_backend(request):
-        return PlainTextResponse(sut._backend_url.get(sut._DEFAULT_BACKEND))
+        return PlainTextResponse(sut._backend_url.get(sut._backend_config[0]))
 
     app = Starlette(routes=[Route("/", echo_backend)])
     app.add_middleware(sut.BackendURLMiddleware)
@@ -26,7 +21,7 @@ def test_no_backend_param_uses_default():
     client = TestClient(_make_test_app())
     resp = client.get("/")
     assert resp.status_code == 200
-    assert resp.text == sut._DEFAULT_BACKEND
+    assert resp.text == sut._backend_config[0]
 
 
 def test_backend_param_overrides():
@@ -48,4 +43,4 @@ def test_contextvar_resets_after_request():
     client = TestClient(_make_test_app())
     client.get("/?backend=http://leaked:1234")
     resp = client.get("/")
-    assert resp.text == sut._DEFAULT_BACKEND
+    assert resp.text == sut._backend_config[0]
