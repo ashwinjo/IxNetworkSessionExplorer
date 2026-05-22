@@ -108,6 +108,80 @@ Polling starts automatically every 60 s. Adjust via the **Poll** button in the t
 
 ---
 
+## MCP Server
+
+IxNSE ships an MCP server (`mcp/`) that exposes all session, server, chassis, and poller operations as tools for AI assistants.
+
+### Install
+
+```bash
+cd mcp
+uv pip install -e .
+```
+
+### Start
+
+```bash
+# CLI arg (takes precedence over env var)
+ixnse-mcp --api-url http://localhost:8080
+
+# Or via environment variable
+IXNSE_API_URL=http://localhost:8080 ixnse-mcp
+
+# Custom host/port (default: 0.0.0.0:8889)
+ixnse-mcp --api-url http://localhost:8080 --host 127.0.0.1 --port 9000
+```
+
+The server listens at `http://<host>:<port>/mcp` (streamable HTTP transport).
+
+### Add to Claude Code
+
+```bash
+# Default backend (http://localhost:8080)
+claude mcp add --transport http ixnse http://localhost:8889/mcp
+
+# Custom backend
+claude mcp add --transport http ixnse "http://localhost:8889/mcp?backend=http://my-ixnse:8080"
+```
+
+Or manually in `~/.claude/settings.json`:
+
+```json
+{
+  "mcpServers": {
+    "ixnse": {
+      "type": "http",
+      "url": "http://localhost:8889/mcp?backend=http://my-ixnse:8080"
+    }
+  }
+}
+```
+
+### Add to Claude Desktop
+
+In `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) or `%APPDATA%\Claude\claude_desktop_config.json` (Windows):
+
+```json
+{
+  "mcpServers": {
+    "ixnse": {
+      "type": "http",
+      "url": "http://localhost:8889/mcp?backend=http://my-ixnse:8080"
+    }
+  }
+}
+```
+
+Restart Claude Desktop after editing.
+
+> **Backend override:** Append `?backend=<url>` to the `/mcp` URL to point this MCP instance
+> at a specific IxNSE backend. If omitted, the server uses the URL it was started with
+> (`--api-url` or `IXNSE_API_URL`, defaulting to `http://localhost:8080`).
+
+> **Note:** The MCP server must be running before Claude connects to it. The default backend URL is set at startup via `--api-url` or `IXNSE_API_URL`. Per-connection overrides use `?backend=<url>` in the MCP URL.
+
+---
+
 ## Local Dev (no Docker)
 
 ```bash
