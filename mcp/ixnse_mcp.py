@@ -108,7 +108,12 @@ async def _api(
         response.raise_for_status()
         if stream:
             return response.content  # raw bytes
-        return response.json()
+        result = response.json()
+        # Unwrap {status, data, ...} envelope used by all IxNSE API responses.
+        # /poll/status returns a flat PollStatus model — no unwrapping needed there.
+        if isinstance(result, dict) and "status" in result and "data" in result:
+            return result["data"]
+        return result
 
 
 def _err(e: Exception) -> str:
