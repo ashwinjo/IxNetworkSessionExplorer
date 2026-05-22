@@ -19,8 +19,6 @@ from typing import Any, Dict, List, Optional
 import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request as StarletteRequest
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -50,18 +48,30 @@ async def health(request: Any) -> Any:
     })
 
 
-class BackendURLMiddleware(BaseHTTPMiddleware):
-    """Extract ?backend= query param and set it in the ContextVar for the request lifetime."""
+class BackendURLMiddleware:
+    """Pure ASGI middleware — extracts ?backend= query param and sets ContextVar per request.
 
-    async def dispatch(self, request: StarletteRequest, call_next: Any) -> Any:
-        backend = request.query_params.get("backend")
-        if backend:
-            token = _backend_url.set(backend.rstrip("/"))
-            try:
-                return await call_next(request)
-            finally:
-                _backend_url.reset(token)
-        return await call_next(request)
+    Uses raw ASGI interface (not BaseHTTPMiddleware) to avoid response buffering,
+    which would break MCP's SSE/chunked streaming transport.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        if scope["type"] in ("http", "websocket"):
+            from urllib.parse import parse_qs
+            query_string = scope.get("query_string", b"")
+            params = parse_qs(query_string.decode())
+            backend_values = params.get("backend", [])
+            if backend_values:
+                token = _backend_url.set(backend_values[0].rstrip("/"))
+                try:
+                    await self.app(scope, receive, send)
+                finally:
+                    _backend_url.reset(token)
+                return
+        await self.app(scope, receive, send)
 
 
 # ---------------------------------------------------------------------------
