@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 import httpx
 from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -46,6 +48,21 @@ async def health(request: Any) -> Any:
         "default_backend": _DEFAULT_BACKEND,
         "backend_override": "append ?backend=<url> to /mcp URL to override per-session",
     })
+
+
+class BackendURLMiddleware(BaseHTTPMiddleware):
+    """Extract ?backend= query param and set it in the ContextVar for the request lifetime."""
+
+    async def dispatch(self, request: StarletteRequest, call_next: Any) -> Any:
+        backend = request.query_params.get("backend")
+        if backend:
+            token = _backend_url.set(backend.rstrip("/"))
+            try:
+                return await call_next(request)
+            finally:
+                _backend_url.reset(token)
+        return await call_next(request)
+
 
 # ---------------------------------------------------------------------------
 # Shared utilities
@@ -1277,6 +1294,8 @@ async def ixnse_clear_cache() -> str:
 
 def main() -> None:
     import argparse
+    import asyncio
+    import uvicorn
 
     parser = argparse.ArgumentParser(description="IxNSE MCP Server (streamable-HTTP)")
     parser.add_argument(
@@ -1292,9 +1311,12 @@ def main() -> None:
         global _DEFAULT_BACKEND
         _DEFAULT_BACKEND = args.api_url.rstrip("/")
 
-    mcp.settings.host = args.host
-    mcp.settings.port = args.port
-    mcp.run(transport="streamable-http")
+    app = mcp.streamable_http_app()
+    app.add_middleware(BackendURLMiddleware)
+
+    config = uvicorn.Config(app, host=args.host, port=args.port, log_level="info")
+    server = uvicorn.Server(config)
+    asyncio.run(server.serve())
 
 
 if __name__ == "__main__":
