@@ -34,5 +34,19 @@ services:
       - backend
     restart: unless-stopped
 
+  mcp:
+    build:
+      context: ./mcp
+      dockerfile: Dockerfile
+    ports:
+      - "${IXSE_BIND_ADDR:-0.0.0.0}:8889:8889"
+    environment:
+      # Points at the backend container via the internal compose network.
+      # Override with IXNSE_API_URL if running a remote backend.
+      - IXNSE_API_URL=${IXNSE_API_URL:-http://backend:8080}
+    depends_on:
+      - backend
+    restart: unless-stopped
+
 volumes:
   ixse_db:

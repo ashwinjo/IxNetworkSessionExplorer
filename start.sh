@@ -16,12 +16,15 @@ fatal() { err "$*"; exit 1; }
 
 # ============= flags ==============================================================
 BUILD=false
+SKIP_MCP=false
 for arg in "$@"; do
     case "$arg" in
         --build|-b) BUILD=true ;;
+        --no-mcp)   SKIP_MCP=true ;;
         --help|-h)
-            echo "Usage: $0 [--build]"
-            echo "  --build   Force rebuild of Docker images before starting"
+            echo "Usage: $0 [--build] [--no-mcp]"
+            echo "  --build    Force rebuild of Docker images before starting"
+            echo "  --no-mcp   Skip starting the MCP server (port 8889)"
             exit 0 ;;
         *) fatal "Unknown argument: $arg" ;;
     esac
@@ -268,6 +271,30 @@ info "Starting frontend..."
 dc up -d frontend
 ok "Frontend container started"
 
+# ============= mcp ================================================================
+if ! $SKIP_MCP; then
+    info "Starting MCP server..."
+    dc up -d mcp
+    ok "MCP container started"
+
+    MCP_URL="http://127.0.0.1:8889/"
+    MCP_TIMEOUT=30
+    elapsed=0
+    info "Waiting for MCP server to be ready (timeout: ${MCP_TIMEOUT}s)..."
+    until curl --silent --fail --max-time 3 "$MCP_URL" >/dev/null 2>&1; do
+        if (( elapsed >= MCP_TIMEOUT )); then
+            printf "${YLW}  ! MCP server did not respond within ${MCP_TIMEOUT}s — continuing anyway${RST}\n"
+            printf "${YLW}    Check logs: docker compose logs mcp${RST}\n"
+            break
+        fi
+        sleep "$INTERVAL"
+        (( elapsed += INTERVAL )) || true
+    done
+    if curl --silent --fail --max-time 3 "$MCP_URL" >/dev/null 2>&1; then
+        ok "MCP server is ready"
+    fi
+fi
+
 # ============= URL summary ========================================================
 printf "\n${BLD}${CYN}==============================================${RST}\n"
 printf "${BLD}  IxNetwork Session Explorer -- Services${RST}\n"
@@ -276,4 +303,11 @@ printf "  ${GRN}%-20s${RST} %s\n" "Frontend UI"      "http://${BIND_ADDR}:3000"
 printf "  ${GRN}%-20s${RST} %s\n" "Backend API"      "http://${BIND_ADDR}:8080"
 printf "  ${GRN}%-20s${RST} %s\n" "API Docs"         "http://${BIND_ADDR}:8080/docs"
 printf "  ${GRN}%-20s${RST} %s\n" "Health Check"     "http://${BIND_ADDR}:8080/health/"
-printf "${BLD}${CYN}==============================================${RST}\n\n"
+if ! $SKIP_MCP; then
+    printf "  ${GRN}%-20s${RST} %s\n" "MCP Server"   "http://${BIND_ADDR}:8889/mcp"
+fi
+printf "${BLD}${CYN}==============================================${RST}\n"
+if ! $SKIP_MCP; then
+    printf "\n  ${CYN}Connect Claude:${RST} claude mcp add --transport http ixnse http://localhost:8889/mcp\n"
+fi
+printf "\n"
