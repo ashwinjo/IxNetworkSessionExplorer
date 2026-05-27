@@ -237,6 +237,24 @@ cd "$SCRIPT_DIR"
 [[ -f docker-compose.yml ]] || fatal "docker-compose.yml not found in $SCRIPT_DIR"
 BIND_ADDR="${IXSE_BIND_ADDR:-0.0.0.0}"
 
+# ============= free ports =========================================================
+free_port() {
+    local port="$1"
+    local pids
+    pids=$(lsof -ti tcp:"$port" 2>/dev/null || true)
+    if [[ -n "$pids" ]]; then
+        info "Port $port in use — killing PID(s): $pids"
+        echo "$pids" | xargs kill -9 2>/dev/null || true
+        ok "Port $port freed"
+    fi
+}
+
+free_port 8080
+free_port 3000
+if ! $SKIP_MCP; then
+    free_port 8889
+fi
+
 # ============= build ==============================================================
 if $BUILD; then
     info "Building images..."

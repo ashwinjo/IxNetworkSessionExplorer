@@ -30,3 +30,4 @@ build/
 
 # Vendored wheels (downloaded by `make vendor`; not committed)
 backend/vendor/*.whl
+.worktrees/
