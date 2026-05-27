@@ -13,53 +13,30 @@
 
 ---
 
-
-Dashboard for lab admins to track IxNetwork sessions across multiple chassis. Shows which sessions are actively using resources (control plane + data plane). No config file — servers managed via UI, settings persisted in SQLite.
+Dashboard for lab admins to track IxNetwork sessions across multiple chassis. Shows which sessions are actively using resources (control plane + data plane). No config file — servers managed via UI, persisted in SQLite.
 
 ---
 
 ## Quickstart
 
-### 1. Start all services
-
 ```bash
-# First run — build images and start
-./start.sh --build
-
-# Subsequent starts
-./start.sh
+./start.sh --build   # first run — builds images
+./start.sh           # subsequent starts
 ```
 
-`start.sh` starts three services: **backend API** (port 8080), **frontend UI** (port 3000), and **MCP server** (port 8889).
+Starts three services: **backend API** (8080), **frontend UI** (3000), **MCP server** (8889).
 
-> Ubuntu 20.04+: `start.sh` auto-installs Docker CE and the compose plugin if missing.
-> Other systems: install [Docker](https://docs.docker.com/engine/install/) manually first.
+> Ubuntu 20.04+: `start.sh` auto-installs Docker CE if missing. Other systems: install [Docker](https://docs.docker.com/engine/install/) first.
 
-### 2. Open the dashboard
+**After start:**
+1. Open **http://localhost:3000**
+2. UI → **Manage Servers** → **Add Server** — enter host/IP, credentials, port (default 443), click **Test Connection**, then **Save**
+3. Connect Claude Code: `claude mcp add --transport http ixnse http://localhost:8889/mcp`
 
-Navigate to **http://localhost:3000**
-
-### 3. Add an IxNetwork server
-
-UI → **Manage Servers** → **Add Server**. Enter name, host/IP, username, password, REST port (default: 443). Click **Test Connection** to verify, then **Save**. Polling starts automatically every 60 s.
-
-### 4. Connect Claude (optional)
-
-The MCP server is already running at `http://localhost:8889/mcp`. Register it with Claude Code:
-
+**Stop:**
 ```bash
-claude mcp add --transport http ixnse http://localhost:8889/mcp
-```
-
-Or for Claude Desktop — see [Configure: Claude Desktop](#configure-claude-desktop) below.
-
-Then ask Claude: *"Show me all IxNetwork sessions and which ports are active."*
-
-### Stop
-
-```bash
-docker compose down        # stop
-docker compose down -v     # stop + delete database
+docker compose down      # stop
+docker compose down -v   # stop + delete database
 ```
 
 ---
@@ -70,19 +47,10 @@ docker compose down -v     # stop + delete database
 |---------|-----|
 | UI | http://localhost:3000 |
 | API | http://localhost:8080 |
-| API Docs (Swagger) | http://localhost:8080/docs |
+| API Docs | http://localhost:8080/docs |
 | Health | http://localhost:8080/health/ |
-| Metrics (Prometheus) | http://localhost:8080/metrics |
+| Metrics | http://localhost:8080/metrics |
 | MCP Server | http://localhost:8889/mcp |
-
----
-
-## Adding Servers
-
-UI → **Manage Servers** → **Add Server**.
-Enter name, host/IP, username, password, REST port (default: 443).
-Use **Test Connection** to verify credentials before saving.
-Polling starts automatically every 60 s. Adjust via the **Poll** button in the toolbar.
 
 ---
 
@@ -134,93 +102,62 @@ Polling starts automatically every 60 s. Adjust via the **Poll** button in the t
 
 ## MCP Server
 
-IxNSE ships an MCP server (`mcp/`) that exposes all session, server, chassis, and poller operations as tools for AI assistants (Claude Code, Claude Desktop, or any MCP-compatible client).
-
-Transport: **streamable HTTP** — the MCP server runs as a standalone process; Claude connects to it over HTTP.
-
-### Install
-
-```bash
-cd mcp
-uv venv && source .venv/bin/activate
-uv pip install -e .
-```
+MCP server (`mcp/`) exposes all IxNSE operations as tools for Claude Code, Claude Desktop, or any MCP-compatible client. Transport: **streamable HTTP**.
 
 ### Start
 
-**Via Docker (recommended) — started automatically by `./start.sh`:**
-
+**Docker — via `./start.sh` (default):**
 ```bash
-./start.sh          # starts backend + frontend + MCP
-./start.sh --no-mcp # skip MCP if not needed
+./start.sh           # MCP starts automatically
+./start.sh --no-mcp  # skip MCP
 ```
 
-**MCP only (Docker) — when backend is already running elsewhere:**
-
+**MCP only — backend running elsewhere:**
 ```bash
-# Build MCP image (first time only)
 docker compose build mcp
-
-# Start only the MCP container, pointed at a remote backend
 IXNSE_API_URL=http://my-ixnse-host:8080 docker compose up -d mcp
 
-# Or override inline without env var
+# or raw docker
 docker run --rm -p 8889:8889 \
   -e IXNSE_API_URL=http://my-ixnse-host:8080 \
   ixnetworksessionexplorer-mcp
 ```
 
-**Manually (outside Docker):**
-
+**Manually (no Docker):**
 ```bash
-# CLI arg (takes precedence over env var)
+cd mcp
+uv venv && source .venv/bin/activate
+uv pip install -e .
 ixnse-mcp --api-url http://localhost:8080
 
-# Or via environment variable
-IXNSE_API_URL=http://localhost:8080 ixnse-mcp
-
-# Custom bind host/port (default: 0.0.0.0:8889)
-ixnse-mcp --api-url http://localhost:8080 --host 127.0.0.1 --port 9000
-
-# Without installing (uv run)
-cd mcp && uv run ixnse-mcp --api-url http://localhost:8080
+# without installing
+uv run ixnse-mcp --api-url http://localhost:8080
 ```
 
-The MCP endpoint is at `http://<host>:<port>/mcp`.
-Health check: `http://<host>:<port>/` — returns JSON with current backend URL.
-
-> The MCP server must be running before Claude connects. Start it before launching Claude Desktop or opening a Claude Code session.
+MCP endpoint: `http://localhost:8889/mcp` · Health: `http://localhost:8889/`
 
 ---
 
 ### Configure: Claude Code
 
-#### Option 1 — CLI (recommended)
-
 ```bash
-# Per-workspace (default scope — stored in local .claude/ dir, not committed)
+# Per-workspace (default)
 claude mcp add --transport http ixnse http://localhost:8889/mcp
 
-# User-wide — available in all your workspaces
+# User-wide
 claude mcp add --transport http --scope user ixnse http://localhost:8889/mcp
 
-# Project-wide — committed to repo as .mcp.json, shared with team
+# Project-wide (committed as .mcp.json)
 claude mcp add --transport http --scope project ixnse http://localhost:8889/mcp
 
-# Point at a remote IxNSE backend (backend override)
+# Remote backend override
 claude mcp add --transport http ixnse "http://localhost:8889/mcp?backend=http://ixnse.lab.example.com:8080"
-```
 
-Verify the server registered:
-
-```bash
+# Verify
 claude mcp list
 ```
 
-#### Option 2 — Manual JSON
-
-User-wide (`~/.claude/settings.json`) or project-level (`.claude/settings.json` in repo root):
-
+Manual (`~/.claude/settings.json` or `.claude/settings.json`):
 ```json
 {
   "mcpServers": {
@@ -232,24 +169,9 @@ User-wide (`~/.claude/settings.json`) or project-level (`.claude/settings.json` 
 }
 ```
 
-With a remote backend override:
-
-```json
-{
-  "mcpServers": {
-    "ixnse": {
-      "type": "http",
-      "url": "http://localhost:8889/mcp?backend=http://ixnse.lab.example.com:8080"
-    }
-  }
-}
-```
-
 ---
 
 ### Configure: Claude Desktop
-
-Edit the config file for your OS:
 
 | OS | Config file |
 |----|-------------|
@@ -268,40 +190,11 @@ Edit the config file for your OS:
 }
 ```
 
-With a remote backend override:
-
-```json
-{
-  "mcpServers": {
-    "ixnse": {
-      "type": "http",
-      "url": "http://localhost:8889/mcp?backend=http://ixnse.lab.example.com:8080"
-    }
-  }
-}
-```
-
-**Restart Claude Desktop after editing the config.**
-
----
-
-### Backend Override
-
-By default the MCP server targets the IxNSE backend it was started with (`--api-url` / `IXNSE_API_URL`, default `http://localhost:8080`).
-
-Append `?backend=<url>` to the `/mcp` URL to redirect a specific Claude session to a different backend — useful when one MCP process serves multiple users or environments:
-
-```
-http://localhost:8889/mcp?backend=http://ixnse-prod.lab.example.com:8080
-```
-
-The override is per-connection and does not affect other connected clients.
+Restart Claude Desktop after editing. Append `?backend=<url>` to target a remote IxNSE instance.
 
 ---
 
 ## Local Dev (no Docker)
-
-Each component runs in its own terminal.
 
 **Terminal 1 — Backend:**
 ```bash
@@ -316,7 +209,7 @@ uvicorn ixse.api.main:app --host 0.0.0.0 --port 8080 --reload
 cd frontend && python3 -m http.server 3000
 ```
 
-**Terminal 3 — MCP server:**
+**Terminal 3 — MCP:**
 ```bash
 cd mcp
 uv venv && source .venv/bin/activate
