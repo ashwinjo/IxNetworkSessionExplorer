@@ -226,12 +226,13 @@ async function triggerRefresh() {
  * @returns {string}
  */
 function formatIxWebDeployment(d, h, checkedAt, kcosInfo) {
-  if (kcosInfo)           return "KCOS";
-  if (d === "standalone") return "Standalone";
-  if (d === "onChassis")  return "On Chassis";
-  if (h === "red")        return "Unreachable";
+  if (kcosInfo)                return "KCOS";
+  if (d === "standalone")      return "Standalone";
+  if (d === "onChassis")       return "On Chassis";
+  if (d === "windowsClient")   return "Windows Client";
+  if (h === "red")             return "Unreachable";
   // yellow: distinguish "never run" from "ran but auth failed"
-  if (h === "yellow")     return checkedAt ? "Auth Failed" : "Not Probed";
+  if (h === "yellow")          return checkedAt ? "Auth Failed" : "Not Probed";
   return "—";
 }
 
@@ -244,10 +245,11 @@ function formatIxWebDeployment(d, h, checkedAt, kcosInfo) {
  * @returns {string}
  */
 function ixWebDeploymentClass(d, h, checkedAt, kcosInfo) {
-  if (kcosInfo)           return "server-web-deployment server-web-deployment--kcos";
-  if (d === "standalone") return "server-web-deployment server-web-deployment--standalone";
-  if (d === "onChassis")  return "server-web-deployment server-web-deployment--on-chassis";
-  if (h === "red")        return "server-web-deployment server-web-deployment--unreachable";
+  if (kcosInfo)                return "server-web-deployment server-web-deployment--kcos";
+  if (d === "standalone")      return "server-web-deployment server-web-deployment--standalone";
+  if (d === "onChassis")       return "server-web-deployment server-web-deployment--on-chassis";
+  if (d === "windowsClient")   return "server-web-deployment server-web-deployment--windows-client";
+  if (h === "red")             return "server-web-deployment server-web-deployment--unreachable";
   if (h === "yellow" && checkedAt) return "server-web-deployment server-web-deployment--auth-failed";
   return "server-web-deployment server-web-deployment--unknown";
 }
@@ -395,11 +397,13 @@ function buildServerBlock(server) {
       ? "Standalone VM — IxNetwork Web on dedicated server"
       : dep === "onChassis"
         ? "On-Chassis — IxNetwork Web embedded in chassis"
-        : hb === "red"
-          ? "Unreachable — HTTPS auth probe failed on both paths"
-          : checkedAt
-            ? "Auth Failed — probe ran but no API key returned (check credentials / password)"
-            : "Not yet probed — click Refresh to run the heartbeat probe";
+        : dep === "windowsClient"
+          ? "Windows IxNetwork Client — sessions via RestPy (no IxNetwork Web UI)"
+          : hb === "red"
+            ? "Unreachable — HTTPS auth probe failed on both paths"
+            : checkedAt
+              ? "Auth Failed — probe ran but no API key returned (check credentials / password)"
+              : "Not yet probed — click Refresh to run the heartbeat probe";
   const versionHtml = ixVersion
     ? `<span class="server-ixn-version" title="IxNetwork (ixnrest) version">v${escapeHtml(ixVersion)}</span>`
     : "";

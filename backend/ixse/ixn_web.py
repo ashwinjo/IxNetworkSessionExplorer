@@ -25,7 +25,7 @@ STANDALONE_AUTH_PATH = "/ixnetworkweb/api/v1/auth/session"
 ON_CHASSIS_AUTH_PATH = "/platform/api/v2/auth/session"
 
 IxWebHeartbeat = Literal["green", "yellow", "red"]
-IxWebDeployment = Literal["standalone", "onChassis"]
+IxWebDeployment = Literal["standalone", "onChassis", "windowsClient"]
 
 
 def _normalize_https_host(host: str) -> tuple[str, int | None]:

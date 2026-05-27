@@ -181,9 +181,9 @@ class Session(BaseModel):
 class IxNetworkWebSnapshot(BaseModel):
     """Result of probing IxNetwork Web HTTPS auth (standalone vs on-chassis UI)."""
 
-    deployment: Literal["standalone", "onChassis"] | None = Field(
+    deployment: Literal["standalone", "onChassis", "windowsClient"] | None = Field(
         default=None,
-        description="Determined from which auth path returned an apiKey",
+        description="Determined from which auth path returned an apiKey, or 'windowsClient' when RestPy connects but IxNetwork Web auth is unavailable",
     )
     heartbeat: Literal["green", "yellow", "red"] = Field(
         ...,

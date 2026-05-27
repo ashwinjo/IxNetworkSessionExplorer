@@ -490,3 +490,19 @@ class RestPyClient:
             )
 
         logger.info("Session %r killed on %s", session_id, self.host)
+
+    def get_server_version(self) -> str | None:
+        """Try to read IxNetwork build version from the first available session's Globals.
+
+        Returns None on any error (not connected, no sessions, attribute missing).
+        """
+        if self._platform is None:
+            return None
+        try:
+            sessions = self._platform.Sessions.find()
+            if not sessions:
+                return None
+            build = getattr(sessions[0].Ixnetwork.Globals, "BuildNumber", None)
+            return str(build) if build else None
+        except Exception:  # noqa: BLE001
+            return None

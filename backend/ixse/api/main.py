@@ -178,12 +178,15 @@ def _parse_vports(
 # ---------------------------------------------------------------------------
 
 
-def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) -> list[Session]:
+def poll_server(
+    state: FleetState, server_cfg: IxNetServerConfig | ServerEntry
+) -> tuple[list[Session], str | None]:
     """Poll a single IxNetwork server and upsert all sessions into *state*.
 
     Runs synchronously — the async caller wraps this in ``run_in_executor``.
 
-    Returns the list of sessions upserted during this cycle (for metrics).
+    Returns ``(sessions, version)`` where ``version`` is the IxNetwork build
+    number read from RestPy Globals (None if unavailable).
     """
     client = RestPyClient(server_cfg.host, server_cfg.username, server_cfg.password, server_cfg.rest_port)
     client.connect()
@@ -261,7 +264,8 @@ def poll_server(state: FleetState, server_cfg: IxNetServerConfig | ServerEntry) 
                 )
                 state.delete_session(server_cfg.name, cached.id)
 
-        return polled
+        restpy_version = client.get_server_version()
+        return polled, restpy_version
     finally:
         client.disconnect()
 
@@ -298,7 +302,7 @@ async def _run_poll_cycle(app: FastAPI) -> None:
                 }
 
             try:
-                polled = await loop.run_in_executor(
+                polled, restpy_version = await loop.run_in_executor(
                     None, poll_server, app.state.fleet, server_cfg
                 )
                 update_server_totals(server_cfg.name, len(polled))
@@ -308,6 +312,15 @@ async def _run_poll_cycle(app: FastAPI) -> None:
                     )
                 # Clear any previous connection error on success
                 app.state.poll_errors.pop(server_cfg.name, None)
+                # If IxNetwork Web probe didn't identify a deployment type but
+                # RestPy connected successfully, this is a Windows IxNetwork client.
+                web_snap = app.state.ixnetwork_web_status.get(server_cfg.name, {})
+                if web_snap.get("deployment") is None:
+                    app.state.ixnetwork_web_status[server_cfg.name] = {
+                        **web_snap,
+                        "deployment": "windowsClient",
+                        "ixnetwork_version": restpy_version or web_snap.get("ixnetwork_version"),
+                    }
             except Exception as exc:  # noqa: BLE001
                 logger.error("Poller error for server '%s': %s", server_cfg.name, exc)
                 app.state.poll_errors[server_cfg.name] = str(exc)

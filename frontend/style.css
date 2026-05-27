@@ -197,6 +197,11 @@ body[data-theme="day"] .server-web-deployment--on-chassis {
   border-color: rgba(212, 135, 10, 0.40);
   background: rgba(212, 135, 10, 0.08);
 }
+body[data-theme="day"] .server-web-deployment--windows-client {
+  color: #1a6db5;                          /* Windows blue, day-mode contrast */
+  border-color: rgba(26, 109, 181, 0.40);
+  background: rgba(26, 109, 181, 0.08);
+}
 
 /* Toast — Keysight Teal (#07858b) for success, Dark Red (#871518) for error */
 body[data-theme="day"] {
@@ -1024,7 +1029,8 @@ header::before {
 .server-web-deployment--unknown     { color: var(--text-dim);    border-color: var(--border-med);         background: rgba(74, 102, 128, 0.06); }
 .server-web-deployment--unreachable { color: #ff6680;            border-color: rgba(244, 63, 94, 0.35);  background: rgba(244, 63, 94, 0.06); }
 .server-web-deployment--auth-failed { color: #ffab40;            border-color: rgba(255, 171, 64, 0.40); background: rgba(255, 171, 64, 0.06); }
-.server-web-deployment--kcos        { color: #7dd3a8;            border-color: rgba(125, 211, 168, 0.45); background: rgba(125, 211, 168, 0.08); }
+.server-web-deployment--kcos           { color: #7dd3a8; border-color: rgba(125, 211, 168, 0.45); background: rgba(125, 211, 168, 0.08); }
+.server-web-deployment--windows-client { color: #60afff; border-color: rgba(96, 175, 255, 0.40);  background: rgba(96, 175, 255, 0.08); }
 
 .server-poll-error {
   display: inline-flex;
