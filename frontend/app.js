@@ -257,8 +257,8 @@ function ixWebDeploymentClass(d, h, checkedAt, kcosInfo) {
 /**
  * @param {string|undefined|null} h  ixnetwork_web_heartbeat
  */
-function ixWebHeartbeatClass(h) {
-  if (h === "green") return "server-heartbeat server-heartbeat--green";
+function ixWebHeartbeatClass(h, dep) {
+  if (h === "green" || dep === "windowsClient") return "server-heartbeat server-heartbeat--green";
   if (h === "red") return "server-heartbeat server-heartbeat--red";
   return "server-heartbeat server-heartbeat--yellow";
 }
@@ -288,7 +288,9 @@ function ixWebHeartbeatTitle(server) {
   const checkedAt = server.ixnetwork_web_checked_at;
   const lines = [];
 
-  if (h === "green") {
+  if (d === "windowsClient") {
+    lines.push("RestPy: connected · Windows IxNetwork Client (no IxNetwork Web UI)");
+  } else if (h === "green") {
     const depStr = d === "standalone"
       ? "standalone VM"
       : d === "onChassis"
@@ -418,7 +420,7 @@ function buildServerBlock(server) {
     <div class="server-header" role="button" tabindex="0"
          aria-expanded="false" aria-controls="sessions-${sanitizeId(server.name)}">
       <span class="server-toggle-icon" aria-hidden="true">&#9660;</span>
-      <span class="${ixWebHeartbeatClass(hb)}"
+      <span class="${ixWebHeartbeatClass(hb, dep)}"
             title="${hbTitle}"
             role="img"
             aria-label="IxNetwork Web status: ${escapeHtml(hb)}"></span>
