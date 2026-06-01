@@ -41,9 +41,11 @@ services:
     ports:
       - "${IXSE_BIND_ADDR:-0.0.0.0}:8889:8889"
     environment:
-      # Points at the backend container via the internal compose network.
-      # Override with IXNSE_API_URL if running a remote backend.
-      - IXNSE_API_URL=${IXNSE_API_URL:-http://backend:8080}
+      # Reaches the backend on the host via host.docker.internal.
+      # Override with IXNSE_API_URL to point at a remote backend.
+      - IXNSE_API_URL=${IXNSE_API_URL:-http://host.docker.internal:8080}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     depends_on:
       - backend
     restart: unless-stopped
