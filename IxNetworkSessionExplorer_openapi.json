@@ -1,0 +1,1516 @@
+{
+    "openapi": "3.1.0",
+    "info": {
+      "title": "IxNetwork Session Explorer",
+      "description": "Unified session manager for IxNetwork lab environments.",
+      "version": "0.1.0"
+    },
+    "paths": {
+      "/sessions/": {
+        "get": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "List all sessions",
+          "description": "Return all sessions grouped by server.\n\nEach server row includes IxNetwork Web probe fields (filled after a poll cycle):\n\n- ``ixnetwork_web_deployment``: ``standalone`` | ``onChassis`` | null\n- ``ixnetwork_web_heartbeat``: ``green`` | ``yellow`` | ``red``\n- ``ixnetwork_web_auth_path``, ``ixnetwork_web_detail``, ``ixnetwork_web_checked_at``\n\nResponse shape::\n\n    {\n        \"servers\": [\n            {\n                \"name\": \"ixnet-server-01\",\n                \"host\": \"10.0.0.1\",\n                \"sessions\": [...],\n                \"session_count\": 3,\n                \"ixnetwork_web_deployment\": \"standalone\",\n                \"ixnetwork_web_heartbeat\": \"green\",\n                ...\n            }\n        ]\n    }\n\nOptional query params:\n- ``?server=X`` — only include sessions from that server\n- ``?tag=bgp``  — only include sessions carrying that tag",
+          "operationId": "list_sessions_sessions__get",
+          "parameters": [
+            {
+              "name": "server",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Filter by IxNetwork server name",
+                "title": "Server"
+              },
+              "description": "Filter by IxNetwork server name"
+            },
+            {
+              "name": "tag",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Filter by tag",
+                "title": "Tag"
+              },
+              "description": "Filter by tag"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response List Sessions Sessions  Get"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sessions/ports/{chassis}/{card}/{port}/utilized": {
+        "get": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "Check if a port is in use (CP or DP active)",
+          "description": "Return utilized status for a physical port identified by chassis/card/port.\n\nScans all sessions for a matching SessionPort. Returns utilized=False if the\nport is not assigned to any session (unassigned = not in use).\n\nAlways returns 200 — an unassigned port is a valid query, not an error.",
+          "operationId": "get_port_utilized_sessions_ports__chassis___card___port__utilized_get",
+          "parameters": [
+            {
+              "name": "chassis",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Chassis"
+              }
+            },
+            {
+              "name": "card",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Card"
+              }
+            },
+            {
+              "name": "port",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "integer",
+                "title": "Port"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Get Port Utilized Sessions Ports  Chassis   Card   Port  Utilized Get"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sessions/{server}/{session_id}": {
+        "get": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "Get session detail",
+          "description": "Return full detail for a single session including ports, plane status, and tags.",
+          "operationId": "get_session_detail_sessions__server___session_id__get",
+          "parameters": [
+            {
+              "name": "server",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Server"
+              }
+            },
+            {
+              "name": "session_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Session Id"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Get Session Detail Sessions  Server   Session Id  Get"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "Kill (destroy) a session",
+          "description": "Remove a session from IxNetwork and evict it from the state store.\n\nRequires ``?confirm=true`` as a safety guard against accidental deletion.",
+          "operationId": "delete_session_sessions__server___session_id__delete",
+          "parameters": [
+            {
+              "name": "server",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Server"
+              }
+            },
+            {
+              "name": "session_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Session Id"
+              }
+            },
+            {
+              "name": "confirm",
+              "in": "query",
+              "required": false,
+              "schema": {
+                "type": "boolean",
+                "description": "Must be true to confirm deletion",
+                "default": false,
+                "title": "Confirm"
+              },
+              "description": "Must be true to confirm deletion"
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Delete Session Sessions  Server   Session Id  Delete"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sessions/{server}/{session_id}/tags": {
+        "patch": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "Update session tags",
+          "description": "Add and/or remove tags on a session.\n\nBoth *add* and *remove* lists are applied atomically (add first, then\nremove).  Either list may be empty.  Operations are idempotent.",
+          "operationId": "update_session_tags_sessions__server___session_id__tags_patch",
+          "parameters": [
+            {
+              "name": "server",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Server"
+              }
+            },
+            {
+              "name": "session_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Session Id"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ixse__api__routers__sessions__TagsUpdateRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Update Session Tags Sessions  Server   Session Id  Tags Patch"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/sessions/{server}/{session_id}/collect-logs": {
+        "post": {
+          "tags": [
+            "sessions"
+          ],
+          "summary": "Collect diagnostic logs",
+          "description": "Trigger IxNetwork log collection for a session and return the zip file.\n\nCalls ``IxNetwork.CollectLogs`` on the server, downloads the resulting\n``diagnostic_logs.zip``, and streams it back to the caller as a file\nattachment.  The temporary file is cleaned up after the response is sent.",
+          "operationId": "collect_session_logs_sessions__server___session_id__collect_logs_post",
+          "parameters": [
+            {
+              "name": "server",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Server"
+              }
+            },
+            {
+              "name": "session_id",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Session Id"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {}
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/chassis/": {
+        "get": {
+          "tags": [
+            "chassis"
+          ],
+          "summary": "List all chassis",
+          "description": "Return all chassis known to the server.\n\nLive IxOS health checks will be added in a future milestone.",
+          "operationId": "list_chassis_chassis__get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response List Chassis Chassis  Get"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/chassis/{name}/health": {
+        "get": {
+          "tags": [
+            "chassis"
+          ],
+          "summary": "Chassis health detail",
+          "description": "Return health details for a single chassis.\n\nLive IxOS reachability checks will be added in a future milestone.\nReturns 404 until chassis config support is implemented.",
+          "operationId": "get_chassis_health_chassis__name__health_get",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Get Chassis Health Chassis  Name  Health Get"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/health/": {
+        "get": {
+          "tags": [
+            "health"
+          ],
+          "summary": "Fleet health summary",
+          "description": "Return a fleet-wide health summary.\n\nLive reachability checks will be added in a future milestone.\nCurrently returns a static ``ok`` envelope.",
+          "operationId": "get_fleet_health_health__get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Get Fleet Health Health  Get"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/bulk": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Bulk upsert servers (add new, update existing)",
+          "description": "Accept a list of server definitions and upsert each one atomically.\n\n- If a server with that name already exists → update host/username/password/port.\n- If it doesn't exist → create it.\n- Each entry in the response carries an ``action`` field:\n  ``\"created\"`` | ``\"updated\"`` | ``\"error\"``.",
+          "operationId": "bulk_upsert_servers_servers_bulk_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkUpsertRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Bulk Upsert Servers Servers Bulk Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Bulk delete servers by name",
+          "description": "Delete multiple servers by name in a single request.",
+          "operationId": "bulk_delete_servers_servers_bulk_delete",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkDeleteRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Bulk Delete Servers Servers Bulk Delete"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/bulk/password": {
+        "patch": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Set a new password for multiple servers",
+          "description": "Change the stored password for each named server.",
+          "operationId": "bulk_update_password_servers_bulk_password_patch",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkPasswordRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Bulk Update Password Servers Bulk Password Patch"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/": {
+        "get": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "List all configured IxNetwork servers",
+          "operationId": "list_servers_servers__get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response List Servers Servers  Get"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Add a new IxNetwork server",
+          "operationId": "create_server_servers__post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerCreateRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "201": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Create Server Servers  Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}": {
+        "put": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Update an existing IxNetwork server",
+          "operationId": "update_server_servers__name__put",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServerUpdateRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Update Server Servers  Name  Put"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "delete": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Remove an IxNetwork server",
+          "operationId": "delete_server_servers__name__delete",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Delete Server Servers  Name  Delete"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}/tags": {
+        "patch": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Update tags on an IxNetwork server",
+          "description": "Add and/or remove tags on a server.\n\nBoth *add* and *remove* lists are applied in order (add first, then\nremove).  Either list may be empty.  Operations are idempotent.",
+          "operationId": "update_server_tags_servers__name__tags_patch",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "requestBody": {
+            "required": true,
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ixse__api__routers__servers__TagsUpdateRequest"
+                }
+              }
+            }
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Update Server Tags Servers  Name  Tags Patch"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/probe": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Test connectivity using supplied credentials (no DB required)",
+          "description": "Attempt a quick RestPy connect/disconnect with caller-supplied credentials.\n\nUseful for validating a new server's credentials before saving to the database.",
+          "operationId": "probe_server_servers_probe_post",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProbeRequest"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Probe Server Servers Probe Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}/test": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Test connectivity to an IxNetwork server",
+          "description": "Attempt a quick RestPy connect/disconnect to verify credentials.",
+          "operationId": "test_server_servers__name__test_post",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Test Server Servers  Name  Test Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}/probe-kcos": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Re-run KCOS SSH detection probe",
+          "description": "Trigger the KCOS SSH banner probe for an existing server.\n\nRuns in the background — the response returns immediately.  The UI will\nreflect the updated kcos_info on the next poll/refresh cycle.",
+          "operationId": "probe_server_kcos_servers__name__probe_kcos_post",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Probe Server Kcos Servers  Name  Probe Kcos Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}/probe-kcos-debug": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Run KCOS SSH probe synchronously and return full debug output",
+          "description": "Run the KCOS SSH banner probe synchronously and return full diagnostic detail.\n\nShows: whether SSH connected, raw MOTD received, whether KCOS marker was found,\nand the error message if SSH failed.  Useful for diagnosing why a server is not\ndetected as KCOS.\n\nThis also persists the result — if KCOS is detected, kcos_cache is updated immediately.",
+          "operationId": "probe_server_kcos_debug_servers__name__probe_kcos_debug_post",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Probe Server Kcos Debug Servers  Name  Probe Kcos Debug Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/servers/{name}/probe-web": {
+        "post": {
+          "tags": [
+            "servers"
+          ],
+          "summary": "Debug IxNetwork Web HTTPS auth probe",
+          "description": "Run the IxNetwork Web HTTPS auth probe immediately and return full debug detail.\n\nShows the exact URLs tried, HTTP status codes, whether an apiKey was received,\nand which deployment type was detected.  Useful for diagnosing why heartbeat\nshows yellow/red after adding a server.",
+          "operationId": "probe_web_servers__name__probe_web_post",
+          "parameters": [
+            {
+              "name": "name",
+              "in": "path",
+              "required": true,
+              "schema": {
+                "type": "string",
+                "title": "Name"
+              }
+            }
+          ],
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "type": "object",
+                    "additionalProperties": true,
+                    "title": "Response Probe Web Servers  Name  Probe Web Post"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/poll/trigger": {
+        "post": {
+          "tags": [
+            "poll"
+          ],
+          "summary": "Force an immediate poll cycle",
+          "description": "Kick off a poll cycle immediately without waiting for the next interval.",
+          "operationId": "trigger_poll_poll_trigger_post",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Trigger Poll Poll Trigger Post"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/poll/status": {
+        "get": {
+          "tags": [
+            "poll"
+          ],
+          "summary": "Current poller state",
+          "operationId": "poll_status_poll_status_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/PollStatus"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/poll/config": {
+        "get": {
+          "tags": [
+            "poll"
+          ],
+          "summary": "Get poller interval configuration",
+          "operationId": "get_poll_config_poll_config_get",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Get Poll Config Poll Config Get"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "patch": {
+          "tags": [
+            "poll"
+          ],
+          "summary": "Update poller interval",
+          "operationId": "update_poll_config_poll_config_patch",
+          "requestBody": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/_PollConfigUpdate"
+                }
+              }
+            },
+            "required": true
+          },
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Update Poll Config Poll Config Patch"
+                  }
+                }
+              }
+            },
+            "422": {
+              "description": "Validation Error",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "$ref": "#/components/schemas/HTTPValidationError"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "/admin/clear-cache": {
+        "post": {
+          "tags": [
+            "admin"
+          ],
+          "summary": "Clear KCOS and IxNetwork-Web detection caches",
+          "description": "Wipe kcos_cache (SQLite) and ixnetwork_web_status (in-memory).\n\nRe-fires KCOS SSH probes for every registered server in the background.\nThe UI will reflect updated detection on the next refresh cycle.",
+          "operationId": "clear_cache_admin_clear_cache_post",
+          "responses": {
+            "200": {
+              "description": "Successful Response",
+              "content": {
+                "application/json": {
+                  "schema": {
+                    "additionalProperties": true,
+                    "type": "object",
+                    "title": "Response Clear Cache Admin Clear Cache Post"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "components": {
+      "schemas": {
+        "BulkDeleteRequest": {
+          "properties": {
+            "names": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Names"
+            }
+          },
+          "type": "object",
+          "required": [
+            "names"
+          ],
+          "title": "BulkDeleteRequest"
+        },
+        "BulkPasswordRequest": {
+          "properties": {
+            "names": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Names"
+            },
+            "password": {
+              "type": "string",
+              "title": "Password"
+            }
+          },
+          "type": "object",
+          "required": [
+            "names",
+            "password"
+          ],
+          "title": "BulkPasswordRequest"
+        },
+        "BulkUpsertRequest": {
+          "properties": {
+            "servers": {
+              "items": {
+                "$ref": "#/components/schemas/ServerCreateRequest"
+              },
+              "type": "array",
+              "title": "Servers"
+            }
+          },
+          "type": "object",
+          "required": [
+            "servers"
+          ],
+          "title": "BulkUpsertRequest"
+        },
+        "HTTPValidationError": {
+          "properties": {
+            "detail": {
+              "items": {
+                "$ref": "#/components/schemas/ValidationError"
+              },
+              "type": "array",
+              "title": "Detail"
+            }
+          },
+          "type": "object",
+          "title": "HTTPValidationError"
+        },
+        "PollStatus": {
+          "properties": {
+            "last_polled_at": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Last Polled At",
+              "description": "When the last poll cycle completed (UTC)"
+            },
+            "next_scheduled": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Next Scheduled",
+              "description": "When the next poll cycle is expected to start (UTC)"
+            },
+            "is_polling": {
+              "type": "boolean",
+              "title": "Is Polling",
+              "description": "True while a poll cycle is in progress",
+              "default": false
+            }
+          },
+          "type": "object",
+          "title": "PollStatus",
+          "description": "Background poller state snapshot."
+        },
+        "ProbeRequest": {
+          "properties": {
+            "host": {
+              "type": "string",
+              "title": "Host",
+              "description": "Hostname or IP of the IxNetwork server"
+            },
+            "username": {
+              "type": "string",
+              "title": "Username",
+              "description": "Login username"
+            },
+            "password": {
+              "type": "string",
+              "title": "Password",
+              "description": "Login password"
+            },
+            "rest_port": {
+              "type": "integer",
+              "title": "Rest Port",
+              "description": "REST API port",
+              "default": 443
+            }
+          },
+          "type": "object",
+          "required": [
+            "host",
+            "username",
+            "password"
+          ],
+          "title": "ProbeRequest"
+        },
+        "ServerCreateRequest": {
+          "properties": {
+            "name": {
+              "type": "string",
+              "title": "Name"
+            },
+            "host": {
+              "type": "string",
+              "title": "Host"
+            },
+            "username": {
+              "type": "string",
+              "title": "Username"
+            },
+            "password": {
+              "type": "string",
+              "title": "Password"
+            },
+            "rest_port": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest Port"
+            },
+            "tags": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Tags",
+              "default": []
+            }
+          },
+          "type": "object",
+          "required": [
+            "name",
+            "host",
+            "username",
+            "password"
+          ],
+          "title": "ServerCreateRequest"
+        },
+        "ServerUpdateRequest": {
+          "properties": {
+            "host": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Host"
+            },
+            "username": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Username"
+            },
+            "password": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Password"
+            },
+            "rest_port": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rest Port"
+            },
+            "tags": {
+              "anyOf": [
+                {
+                  "items": {
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Tags"
+            }
+          },
+          "type": "object",
+          "title": "ServerUpdateRequest"
+        },
+        "ValidationError": {
+          "properties": {
+            "loc": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  }
+                ]
+              },
+              "type": "array",
+              "title": "Location"
+            },
+            "msg": {
+              "type": "string",
+              "title": "Message"
+            },
+            "type": {
+              "type": "string",
+              "title": "Error Type"
+            }
+          },
+          "type": "object",
+          "required": [
+            "loc",
+            "msg",
+            "type"
+          ],
+          "title": "ValidationError"
+        },
+        "_PollConfigUpdate": {
+          "properties": {
+            "interval_seconds": {
+              "type": "integer",
+              "title": "Interval Seconds"
+            }
+          },
+          "type": "object",
+          "required": [
+            "interval_seconds"
+          ],
+          "title": "_PollConfigUpdate"
+        },
+        "ixse__api__routers__servers__TagsUpdateRequest": {
+          "properties": {
+            "add": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Add",
+              "description": "Tags to add"
+            },
+            "remove": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Remove",
+              "description": "Tags to remove"
+            }
+          },
+          "type": "object",
+          "title": "TagsUpdateRequest",
+          "description": "Body for PATCH /servers/{name}/tags."
+        },
+        "ixse__api__routers__sessions__TagsUpdateRequest": {
+          "properties": {
+            "add": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Add",
+              "description": "Tags to add"
+            },
+            "remove": {
+              "items": {
+                "type": "string"
+              },
+              "type": "array",
+              "title": "Remove",
+              "description": "Tags to remove"
+            }
+          },
+          "type": "object",
+          "title": "TagsUpdateRequest",
+          "description": "Body for PATCH /sessions/{server}/{id}/tags."
+        }
+      }
+    }
+  }
