@@ -2090,3 +2090,4 @@ document.getElementById("poller-interval-input").addEventListener("keydown", e =
 // ---------------------------------------------------------------------------
 fetchSessions();
 fetchPollConfig();
+toggleAutoRefresh();
